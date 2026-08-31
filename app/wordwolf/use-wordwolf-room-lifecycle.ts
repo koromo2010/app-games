@@ -102,6 +102,30 @@ export function useWordWolfRoomLifecycle(args: Args) {
     } catch { args.setError("コピーできませんでした。ブラウザの権限を確認してください。"); }
   };
   const copyRoomCode = () => { if (args.room) void copyText(args.room.code, "ROOMをコピーしました。"); };
-  const copyRoomInvite = () => { if (args.room) { const passphrase = args.roomPassphrase.trim() || (args.room.passphrase ? "設定済み（再表示不可）" : "なし"); void copyText(`ROOM: ${args.room.code}\n合言葉: ${passphrase}`, "ROOMと合言葉をコピーしました。"); } };
+  const copyRoomInvite = async () => {
+    if (!args.room) return;
+    try {
+      const response = await fetch("/api/room-invites", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          providerKind: "built-in",
+          gameNamespace: "wordwolf",
+          displayCode: args.room.code,
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { href?: string };
+      if (!response.ok || !payload.href) throw new Error("ROOM_INVITE_ISSUE_FAILED");
+      const passphrase = args.roomPassphrase.trim()
+        || (args.room.passphrase ? "設定済み（再表示不可）" : "なし");
+      await copyText(
+        `${new URL(payload.href, window.location.origin).toString()}\n合言葉: ${passphrase}`,
+        "招待リンクと合言葉をコピーしました。",
+      );
+    } catch {
+      args.setError("招待リンクを作成できませんでした。最新の部屋状態を確認してください。");
+    }
+  };
   return { createRoom, showJoinChoices, joinRoom, dissolveRoom, copyRoomCode, copyRoomInvite };
 }

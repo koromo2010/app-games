@@ -152,10 +152,17 @@ function commandEnvelope(value: unknown): GameSdkCommandEnvelope<PreviewCommand>
     || Array.isArray(command)
     || typeof (command as { type?: unknown }).type !== "string"
     || !Number.isSafeInteger(source.expectedRevision)
+    || (source.expectedRoomInstanceId !== undefined && (
+      typeof source.expectedRoomInstanceId !== "string"
+      || !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(source.expectedRoomInstanceId)
+    ))
   ) return null;
   return {
     ...(typeof source.commandId === "string" ? { commandId: source.commandId } : {}),
     expectedRevision: Number(source.expectedRevision),
+    ...(typeof source.expectedRoomInstanceId === "string"
+      ? { expectedRoomInstanceId: source.expectedRoomInstanceId }
+      : {}),
     command: command as PreviewCommand,
   };
 }

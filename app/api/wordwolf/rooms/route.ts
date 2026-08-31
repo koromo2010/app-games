@@ -38,11 +38,12 @@ const handlers = createOnlineRoomRouteHandlers<Room, RoomChoice>({
     presentRoom: sanitizeWordWolfRoom,
   },
   create: ({ roomDraft, session }) => createStoredWordWolfRoom(roomDraft, session.id),
-  command: ({ code, action, session }) => action.type === "join-room"
+  command: ({ code, action, session, expectedRoomInstanceId }) => action.type === "join-room"
     ? joinStoredWordWolfRoom(
         code,
         action.player as Player,
         typeof action.passphrase === "string" ? action.passphrase : "",
+        expectedRoomInstanceId,
       )
     : applyStoredWordWolfRoomAction(code, session.id, action as unknown as WordWolfRoomAction),
   delete: {

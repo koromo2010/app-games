@@ -54,8 +54,9 @@ const roomRuntime = createPlatformOnlineRoomStoreRuntime({
 async function mutateStoredTahoiyaRoom(
   code: string,
   mutate: (room: TahoiyaRoom) => TahoiyaRoom,
+  expectedRoomInstanceId?: string,
 ) {
-  return roomRuntime.mutate(code, mutate);
+  return roomRuntime.mutate(code, mutate, { expectedRoomInstanceId });
 }
 
 export async function loadStoredTahoiyaRoom(code: string) {
@@ -109,7 +110,12 @@ export async function createStoredTahoiyaRoom(room: unknown, actorId = "") {
   );
 }
 
-export async function joinStoredTahoiyaRoom(code: string, player: TahoiyaPlayer, passphrase: string) {
+export async function joinStoredTahoiyaRoom(
+  code: string,
+  player: TahoiyaPlayer,
+  passphrase: string,
+  expectedRoomInstanceId?: string,
+) {
   const normalizedCode = code.trim().toUpperCase();
   const claim = await roomRuntime.claim(
     player.id,
@@ -127,7 +133,7 @@ export async function joinStoredTahoiyaRoom(code: string, player: TahoiyaPlayer,
       if (current.players.length >= onlineRoomPlayerLimits.tahoiya) throw new Error("TAHOIYA_ROOM_FULL");
       const players = [...current.players, player];
       return { ...current, players, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, players, player.id) };
-    });
+    }, expectedRoomInstanceId);
     return joined;
   } catch (error) {
     if (claim === "claimed") {

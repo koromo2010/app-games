@@ -9,6 +9,7 @@ import {
   applyOnlineRoomDebugParticipantCommand,
 } from "@/lib/online-room-debug-participants";
 import { createPlatformOnlineRoomStoreRuntime } from "@/lib/online-room-store-runtime";
+import { expectedRoomInstanceIdFrom } from "@/lib/room-invite-target";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import type {
@@ -59,8 +60,9 @@ const roomRuntime = createPlatformOnlineRoomStoreRuntime({
 async function mutateStoredRoom(
   code: string,
   mutate: (room: NorthernRoom) => NorthernRoom,
+  expectedRoomInstanceId?: string,
 ) {
-  return roomRuntime.mutate(code, mutate);
+  return roomRuntime.mutate(code, mutate, { expectedRoomInstanceId });
 }
 
 export async function loadStoredNorthernRoom(code: string) {
@@ -214,7 +216,7 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
       };
     }
     return current;
-  }).catch(async (error) => {
+  }, expectedRoomInstanceIdFrom(action)).catch(async (error) => {
     if (action.type === "join-room" && claim === "claimed") {
       await roomRuntime.release(action.actorId, code);
     }

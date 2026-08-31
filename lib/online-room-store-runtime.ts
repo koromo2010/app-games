@@ -21,6 +21,9 @@ import {
 } from "./player-active-room.ts";
 import { redisCommand } from "./redis-store.ts";
 import type { DissolvableGameId } from "./room-dissolve-policy.ts";
+import { createRoomInstanceId, normalizeRoomInstanceId } from "./room-invite-target.ts";
+import { compareAndDeleteRoomInviteForPrimary } from "./room-invite-store.ts";
+import { resolveGameFieldsEnvironment } from "./game-fields-environment.ts";
 
 type PlatformOnlineRoomPlayer = {
   id: string;
@@ -30,6 +33,7 @@ type PlatformOnlineRoomPlayer = {
 
 type PlatformOnlineRoom = {
   code: string;
+  roomInstanceId?: string;
   hostId: string;
   phase: string;
   players: PlatformOnlineRoomPlayer[];
@@ -67,6 +71,7 @@ type MutateOptions<TRoom extends PlatformOnlineRoom> = {
     changed: TRoom,
     context: { revision: number; timestamp: number },
   ) => TRoom;
+  expectedRoomInstanceId?: string;
 };
 
 export type PlatformOnlineRoomStoreRuntime<
@@ -127,22 +132,53 @@ export function createPlatformOnlineRoomStoreRuntime<
     onlineRoomNonDebugPlayerActiveRoomKeys(room.players, playerActiveRoomKey)
   );
 
+  const normalizeWithRoomInstance = (
+    value: unknown,
+    roomNormalizer: (candidate: unknown) => TRoom | null,
+  ): TRoom | null => {
+    const room = roomNormalizer(value);
+    if (!room) return null;
+    const roomInstanceId = normalizeRoomInstanceId(
+      (value as { roomInstanceId?: unknown } | null)?.roomInstanceId,
+    );
+    return roomInstanceId ? { ...room, roomInstanceId } : room;
+  };
+
   const deleteStorage = async (
     roomCode: string,
     playerIds: Iterable<string>,
   ) => {
+    const raw = await redisCommand<string | null>(["GET", roomKey(roomCode)]);
+    let roomInstanceId: string | null = null;
+    try {
+      roomInstanceId = normalizeRoomInstanceId(
+        (JSON.parse(raw ?? "null") as { roomInstanceId?: unknown } | null)?.roomInstanceId,
+      );
+    } catch {
+      roomInstanceId = null;
+    }
+    if (roomInstanceId) {
+      await compareAndDeleteRoomInviteForPrimary({
+        environment: resolveGameFieldsEnvironment(),
+        providerKind: "built-in",
+        gameNamespace: gameId,
+        displayCode: roomCode.trim().toUpperCase(),
+        roomInstanceId,
+      });
+    }
     await deleteIndexedOnlineRoomStorage({
       roomCode,
       roomKey: roomKey(roomCode),
       roomIndexKey,
       playerActiveRoomKeys: [...playerIds].map(playerActiveRoomKey),
+      expectedRoomInstanceId: roomInstanceId ?? undefined,
     });
   };
 
   const parse = (raw: string | null): TRoom | null => {
     if (!raw) return null;
     try {
-      return normalize(JSON.parse(raw));
+      return normalizeWithRoomInstance(JSON.parse(raw), normalize);
     } catch {
       return null;
     }
@@ -205,9 +241,10 @@ export function createPlatformOnlineRoomStoreRuntime<
     roomKey,
     loadRoom: load,
     mutate: mutation,
-    normalize: normalizeMutation,
+    normalize: (value) => normalizeWithRoomInstance(value, normalizeMutation),
     prepare: options.prepare,
     activeRoomKeys,
+    expectedRoomInstanceId: options.expectedRoomInstanceId,
     afterSave,
     realtimeGame: gameId,
     errors,
@@ -223,6 +260,17 @@ export function createPlatformOnlineRoomStoreRuntime<
       inProgress: errors.inProgress,
     },
     loadRoom: load,
+    beforeDelete: async (room: TRoom) => {
+      const roomInstanceId = normalizeRoomInstanceId(room.roomInstanceId);
+      if (!roomInstanceId) return;
+      await compareAndDeleteRoomInviteForPrimary({
+        environment: resolveGameFieldsEnvironment(),
+        providerKind: "built-in",
+        gameNamespace: gameId,
+        displayCode: room.code,
+        roomInstanceId,
+      });
+    },
   };
 
   return {
@@ -236,21 +284,26 @@ export function createPlatformOnlineRoomStoreRuntime<
     release,
     releaseMany,
     async create(room, actorId = "", loadRoom = load) {
+      const roomWithInstance = {
+        ...room,
+        roomInstanceId: normalizeRoomInstanceId(room.roomInstanceId)
+          ?? createRoomInstanceId(),
+      } as TRoom;
       const claimResult = actorId
-        ? await claim(actorId, room.code, loadRoom)
+        ? await claim(actorId, roomWithInstance.code, loadRoom)
         : null;
       try {
-        await createIndexedOnlineRoom(room, {
+        await createIndexedOnlineRoom(roomWithInstance, {
           roomKey,
           roomIndexKey,
           activeRoomKeys,
           conflictError: errors.conflict,
           activeRoomConflictError: errors.playerActive,
         });
-        return room;
+        return roomWithInstance;
       } catch (error) {
         if (actorId && claimResult === "claimed") {
-          await release(actorId, room.code);
+          await release(actorId, roomWithInstance.code);
         }
         throw error;
       }

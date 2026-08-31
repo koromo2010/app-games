@@ -1,6 +1,9 @@
 import { normalizeDrawingStroke, normalizeDrawingStrokes } from "@/lib/drawing-canvas";
 import { findCanvasUndoStrokeIndex, nextCanvasOwnerId, type CanvasLayerMode, type CanvasRoom, type CanvasRoomAction, type CanvasRoomPlayer } from "@/lib/canvas-room";
 import { redisCommand } from "@/lib/redis-store";
+import { createRoomInstanceId, normalizeRoomInstanceId } from "@/lib/room-invite-target";
+import { compareAndDeleteRoomInviteForPrimary } from "@/lib/room-invite-store";
+import { resolveGameFieldsEnvironment } from "@/lib/game-fields-environment";
 
 const key = (code: string) => `canvas:room:${code}`;
 const ttl = 60 * 60 * 6;
@@ -9,6 +12,7 @@ const normalizeCode = (code: string) => code.trim().toUpperCase().replace(/[^A-Z
 function parse(raw: string | null): CanvasRoom | null {
   if (!raw) return null;
   const room = JSON.parse(raw) as CanvasRoom;
+  room.roomInstanceId = normalizeRoomInstanceId(room.roomInstanceId) ?? undefined;
   room.layerMode = room.layerMode === "per-player" ? "per-player" : "shared";
   room.layers = Array.isArray(room.layers) && room.layers.length ? room.layers : [{ id: "base", name: "レイヤー1", createdAt: room.updatedAt || Date.now() }];
   room.strokes = normalizeDrawingStrokes(room.strokes);
@@ -16,24 +20,25 @@ function parse(raw: string | null): CanvasRoom | null {
   return room;
 }
 
-export function publicCanvasRoom(room: CanvasRoom) { const safe: Partial<CanvasRoom> = { ...room }; delete safe.passphrase; return { ...safe, passphraseProtected: Boolean(room.passphrase) }; }
+export function publicCanvasRoom(room: CanvasRoom) { const safe: Partial<CanvasRoom> = { ...room }; delete safe.passphrase; delete safe.roomInstanceId; return { ...safe, passphraseProtected: Boolean(room.passphrase) }; }
 export async function loadCanvasRoom(code: string) { return parse(await redisCommand<string | null>(["GET", key(normalizeCode(code))])); }
 export async function createCanvasRoom(player: CanvasRoomPlayer, passphrase = "", layerMode: CanvasLayerMode = "shared") {
   for (let attempt = 0; attempt < 12; attempt++) {
     const code = Array.from({ length: 4 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
     const layerId = crypto.randomUUID();
     const firstPlayer = layerMode === "per-player" ? { ...player, layerId } : player;
-    const room: CanvasRoom = { code, ownerId: player.id, passphrase: passphrase.trim().slice(0, 40) || undefined, layerMode, layers: [{ id: layerId, name: layerMode === "per-player" ? `${player.name}のレイヤー` : "レイヤー1", ownerId: layerMode === "per-player" ? player.id : undefined, createdAt: Date.now() }], players: [firstPlayer], strokes: [], revision: 1, updatedAt: Date.now() };
+    const room: CanvasRoom = { code, roomInstanceId: createRoomInstanceId(), ownerId: player.id, passphrase: passphrase.trim().slice(0, 40) || undefined, layerMode, layers: [{ id: layerId, name: layerMode === "per-player" ? `${player.name}のレイヤー` : "レイヤー1", ownerId: layerMode === "per-player" ? player.id : undefined, createdAt: Date.now() }], players: [firstPlayer], strokes: [], revision: 1, updatedAt: Date.now() };
     if (await redisCommand<"OK" | null>(["SET", key(code), JSON.stringify(room), "NX", "EX", String(ttl)])) return room;
   }
   throw new Error("CANVAS_ROOM_CONFLICT");
 }
-export async function updateCanvasRoom(codeInput: string, actor: CanvasRoomPlayer, action: CanvasRoomAction) {
+export async function updateCanvasRoom(codeInput: string, actor: CanvasRoomPlayer, action: CanvasRoomAction, expectedRoomInstanceId?: string) {
   const code = normalizeCode(codeInput);
   for (let attempt = 0; attempt < 6; attempt++) {
     const currentRaw = await redisCommand<string | null>(["GET", key(code)]);
     const room = parse(currentRaw);
     if (!room || !currentRaw) throw new Error("CANVAS_ROOM_NOT_FOUND");
+    if (expectedRoomInstanceId && room.roomInstanceId !== expectedRoomInstanceId) throw new Error("CANVAS_ROOM_CONFLICT");
     const member = room.players.some((player) => player.id === actor.id);
     if (action.type === "join") {
       if (room.passphrase && room.passphrase !== action.passphrase?.trim()) throw new Error("CANVAS_BAD_PASSPHRASE");
@@ -77,4 +82,26 @@ export async function updateCanvasRoom(codeInput: string, actor: CanvasRoomPlaye
   }
   throw new Error("CANVAS_ROOM_CONFLICT");
 }
-export async function deleteCanvasRoom(code: string, actorId: string) { const room = await loadCanvasRoom(code); if (!room) return; if (room.ownerId !== actorId) throw new Error("CANVAS_ROOM_FORBIDDEN"); await redisCommand<number>(["DEL", key(room.code)]); }
+export async function deleteCanvasRoom(code: string, actorId: string) {
+  const room = await loadCanvasRoom(code);
+  if (!room) return;
+  if (room.ownerId !== actorId) throw new Error("CANVAS_ROOM_FORBIDDEN");
+  if (!room.roomInstanceId) {
+    await redisCommand<number>(["DEL", key(room.code)]);
+    return;
+  }
+  await compareAndDeleteRoomInviteForPrimary({
+    environment: resolveGameFieldsEnvironment(),
+    providerKind: "canvas",
+    gameNamespace: "canvas",
+    displayCode: room.code,
+    roomInstanceId: room.roomInstanceId,
+  });
+  await redisCommand<number>([
+    "EVAL",
+    "local raw=redis.call('GET',KEYS[1]); if not raw then return 0 end; local current=cjson.decode(raw); if current.roomInstanceId~=ARGV[1] then return 0 end; redis.call('DEL',KEYS[1]); return 1",
+    "1",
+    key(room.code),
+    room.roomInstanceId,
+  ]);
+}

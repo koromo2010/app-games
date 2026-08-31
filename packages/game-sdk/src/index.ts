@@ -482,6 +482,7 @@ export type GameSdkCommand<TType extends string = string, TPayload = unknown> = 
 export type GameSdkCommandEnvelope<TCommand extends { type: string }> = {
   commandId?: string;
   expectedRevision: number;
+  expectedRoomInstanceId?: string;
   command: TCommand;
 };
 

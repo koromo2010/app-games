@@ -19,12 +19,14 @@ export async function applyTahoiyaRoomRouteCommand({
   telemetry,
   code,
   action,
+  expectedRoomInstanceId,
 }: OnlineRoomCommandContext<TahoiyaRoom>) {
   if (action.type === "join-room") {
     return joinStoredTahoiyaRoom(
       code,
       action.player as TahoiyaRoom["players"][number],
       typeof action.passphrase === "string" ? action.passphrase : "",
+      expectedRoomInstanceId,
     );
   }
   if (action.type !== "start-round") {

@@ -11,9 +11,6 @@ import {
   requireSdkPreviewAuthenticatedPlayer,
 } from "@/lib/sdk-preview-account-session";
 import { loadSdkPreviewPackageModule } from "@/lib/sdk-preview-package-runtime";
-import {
-  scheduleSdkPreviewRoomInviteIndexSuccess,
-} from "@/lib/sdk-preview-room-invite-index";
 import { createRequestTelemetry } from "@/lib/observability";
 import { createGameSdkCommandTimingCollector } from "@/lib/game-sdk-command-timing";
 import platformRelease from "../../../../../../../config/platform-release.json";
@@ -39,7 +36,6 @@ async function handle(request: Request, context: RouteContext, method: Method) {
   const { creatorSlug, gameId } = await context.params;
   const requestUrl = new URL(request.url);
   const requestedRevision = requestUrl.searchParams.get("revision")?.trim() || undefined;
-  const requestedRoomCode = requestUrl.searchParams.get("code")?.trim().toUpperCase() || "";
   const route = `/api/sdk-preview/${creatorSlug}/games/${gameId}/rooms`;
   const telemetry = createRequestTelemetry(request, route, {
     game: `sdk-preview:${gameId}`,
@@ -152,24 +148,6 @@ async function handle(request: Request, context: RouteContext, method: Method) {
         )
       ),
       onSuccess(operation, room, affected, command) {
-        void scheduleSdkPreviewRoomInviteIndexSuccess({
-          operation,
-          room,
-          affected,
-          commandApplied: command?.applied,
-          requestedRoomCode,
-          creatorSlug,
-          gameId,
-          fallbackRevision: runtime.runtimeContract.packageRevision,
-          onFailure(error, fields) {
-            telemetry.failure(
-              "game-sdk.preview-room-invite-index",
-              error,
-              500,
-              fields,
-            );
-          },
-        });
         if (method === "GET") return;
         telemetry.success("game-sdk.preview-room", {
           action: operation,

@@ -18,6 +18,7 @@ import {
   applyOnlineRoomDebugParticipantCommand,
 } from "@/lib/online-room-debug-participants";
 import { createPlatformOnlineRoomStoreRuntime } from "@/lib/online-room-store-runtime";
+import { expectedRoomInstanceIdFrom } from "@/lib/room-invite-target";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import { addLog, beginBattle, beginRound, fillMissingSecrets, finishRound, performChallenge, performScan, reconcileProgress } from "@/lib/kotoba-senpuku-room-domain";
@@ -51,8 +52,9 @@ const roomRuntime = createPlatformOnlineRoomStoreRuntime({
 async function mutateStoredRoom(
   code: string,
   mutate: (room: KotobaSenpukuRoom) => KotobaSenpukuRoom,
+  expectedRoomInstanceId?: string,
 ) {
-  return roomRuntime.mutate(code, mutate);
+  return roomRuntime.mutate(code, mutate, { expectedRoomInstanceId });
 }
 
 export async function loadStoredKotobaSenpukuRoom(code: string) {
@@ -218,7 +220,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
       return kana ? performScan(current, kana) : finishRound(current);
     }
     return current;
-  }).catch(async (error) => {
+  }, expectedRoomInstanceIdFrom(action)).catch(async (error) => {
     if (action.type === "join-room" && claim === "claimed") {
       await roomRuntime.release(action.actorId, code);
     }

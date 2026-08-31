@@ -3,7 +3,7 @@ import type { DrawingStroke } from "@/lib/drawing-canvas";
 export type CanvasLayerMode = "shared" | "per-player";
 export type CanvasLayer = { id: string; name: string; ownerId?: string; createdAt: number };
 export type CanvasRoomPlayer = { id: string; name: string; joinedAt: number; layerId?: string };
-export type CanvasRoom = { code: string; ownerId: string; passphrase?: string; layerMode: CanvasLayerMode; layers: CanvasLayer[]; players: CanvasRoomPlayer[]; strokes: DrawingStroke[]; revision: number; updatedAt: number };
+export type CanvasRoom = { code: string; roomInstanceId?: string; ownerId: string; passphrase?: string; layerMode: CanvasLayerMode; layers: CanvasLayer[]; players: CanvasRoomPlayer[]; strokes: DrawingStroke[]; revision: number; updatedAt: number };
 export type CanvasRoomAction =
   | { type: "join"; passphrase?: string }
   | { type: "leave" }

@@ -8,6 +8,7 @@ import {
   applyOnlineRoomDebugParticipantCommand,
 } from "@/lib/online-room-debug-participants";
 import { createPlatformOnlineRoomStoreRuntime } from "@/lib/online-room-store-runtime";
+import { expectedRoomInstanceIdFrom } from "@/lib/room-invite-target";
 import type { ActiveRoomClaim } from "@/lib/player-active-room";
 import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import { recordDaifugoGameResults } from "@/lib/player-stats-store";
@@ -56,8 +57,9 @@ const roomRuntime = createPlatformOnlineRoomStoreRuntime({
   ]),
 });
 
-async function mutateStoredRoom(code: string, mutate: (room: DaifugoRoom) => DaifugoRoom, debugEvent?: DebugEvent) {
+async function mutateStoredRoom(code: string, mutate: (room: DaifugoRoom) => DaifugoRoom, debugEvent?: DebugEvent, expectedRoomInstanceId?: string) {
   return roomRuntime.mutate(code, mutate, {
+    expectedRoomInstanceId,
     prepare: (current, changed, { revision, timestamp }) => {
       const actorName = debugEvent?.actorId
         ? changed.players.find((player) => player.id === debugEvent.actorId)?.name ?? "不明なプレイヤー"
@@ -215,7 +217,7 @@ export async function applyStoredDaifugoAction(code: string, action: DaifugoRoom
     }
     if (!canPassDaifugoTurn(current.game, targetId)) throw new Error("DAIFUGO_INVALID_PLAY");
     return passDaifugoRoomTurn(current, targetId);
-  }, { actorId: action.actorId, action: debugActionLabels[action.type] }).catch(async (error) => {
+  }, { actorId: action.actorId, action: debugActionLabels[action.type] }, expectedRoomInstanceIdFrom(action)).catch(async (error) => {
     if (action.type === "join-room" && claim === "claimed") {
       await roomRuntime.release(action.actorId, normalizedCode);
     }

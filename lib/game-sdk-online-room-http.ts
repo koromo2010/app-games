@@ -218,12 +218,19 @@ function commandEnvelope(value: unknown): ValidCommandEnvelope | null {
     || Number(envelope.expectedRevision) < 1
     || typeof envelope.commandId !== "string"
     || !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(envelope.commandId)
+    || (envelope.expectedRoomInstanceId !== undefined && (
+      typeof envelope.expectedRoomInstanceId !== "string"
+      || !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(envelope.expectedRoomInstanceId)
+    ))
   ) {
     return null;
   }
   return {
     commandId: envelope.commandId,
     expectedRevision: Number(envelope.expectedRevision),
+    ...(typeof envelope.expectedRoomInstanceId === "string"
+      ? { expectedRoomInstanceId: envelope.expectedRoomInstanceId }
+      : {}),
     command: command as SafeCommand,
   };
 }

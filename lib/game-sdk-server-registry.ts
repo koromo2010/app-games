@@ -29,6 +29,8 @@ export type ApprovedGameSdkRegistration = {
   clientKind: "wordwolf" | "iframe-package";
   clientRuntimeUrl?: string;
   revision?: string;
+  sourceCreatorSlug?: string;
+  sourceGameId?: string;
   packageRootSha256?: string;
   serverBundleSha256?: string;
   appSetSourceSha256?: string;

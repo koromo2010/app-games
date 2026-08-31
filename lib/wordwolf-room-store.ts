@@ -281,7 +281,12 @@ export async function applyStoredWordWolfRoomAction(code: string, actorId: strin
   return saved;
 }
 
-export async function joinStoredWordWolfRoom(code: string, player: Player, passphrase: string) {
+export async function joinStoredWordWolfRoom(
+  code: string,
+  player: Player,
+  passphrase: string,
+  expectedRoomInstanceId?: string,
+) {
   const normalizedCode = code.trim().toUpperCase();
   const claim = await roomRuntime.claim(player.id, normalizedCode);
   try {
@@ -312,7 +317,7 @@ export async function joinStoredWordWolfRoom(code: string, player: Player, passp
           player.id,
         ),
       };
-    });
+    }, { expectedRoomInstanceId });
   } catch (error) {
     if (claim === "claimed") {
       await roomRuntime.release(player.id, normalizedCode);

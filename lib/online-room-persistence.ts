@@ -10,16 +10,18 @@ export async function compareAndSetOnlineRoom<Room extends { code: string }>(
   room: Room,
   roomKey: (code: string) => string,
   activeRoomKeys: string[] = [],
+  expectedRoomInstanceId?: string,
 ) {
   const keys = [roomKey(room.code), ...new Set(activeRoomKeys.filter(Boolean))];
   return redisCommand<number>([
     "EVAL",
-    "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local current=cjson.decode(raw); if tonumber(current.revision or 0)~=tonumber(ARGV[1]) then return 0 end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); for i=2,#KEYS do local active=redis.call('GET',KEYS[i]); if not active or string.upper(active)==string.upper(ARGV[4]) then redis.call('SET',KEYS[i],ARGV[4],'EX',ARGV[3]) end end; return 1",
+    "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local current=cjson.decode(raw); if tonumber(current.revision or 0)~=tonumber(ARGV[1]) then return 0 end; if ARGV[4]~='' and current.roomInstanceId~=ARGV[4] then return 0 end; if current.roomInstanceId and cjson.decode(ARGV[2]).roomInstanceId~=current.roomInstanceId then return 0 end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); for i=2,#KEYS do local active=redis.call('GET',KEYS[i]); if not active or string.upper(active)==string.upper(ARGV[5]) then redis.call('SET',KEYS[i],ARGV[5],'EX',ARGV[3]) end end; return 1",
     String(keys.length),
     ...keys,
     String(expectedRevision),
     JSON.stringify(room),
     String(multiplayerRoomTtlSeconds),
+    expectedRoomInstanceId ?? "",
     room.code,
   ]);
 }
@@ -93,6 +95,7 @@ export async function mutateOnlineRoomWithRetry<Room extends RevisionedOnlineRoo
   normalize: (room: unknown) => Room | null;
   prepare?: (current: Room, changed: Room, context: { revision: number; timestamp: number }) => Room;
   activeRoomKeys?: (room: Room) => string[];
+  expectedRoomInstanceId?: string;
   afterSave?: (room: Room) => Promise<unknown>;
   realtimeGame?: OnlineRoomRealtimeGame;
   errors: { notFound: string; invalid: string; conflict: string };
@@ -106,6 +109,7 @@ export async function mutateOnlineRoomWithRetry<Room extends RevisionedOnlineRoo
         room,
         options.roomKey,
         options.activeRoomKeys?.(room),
+        options.expectedRoomInstanceId,
       );
       if (saved === 1) return "saved";
       if (saved === -1) return "missing";

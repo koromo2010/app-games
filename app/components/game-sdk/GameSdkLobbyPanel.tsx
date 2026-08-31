@@ -17,6 +17,9 @@ type Props = {
   pending: boolean;
   defaultsEndpoint: string;
   previewOnly: boolean;
+  gameId: string;
+  creatorSlug?: string;
+  packageRevision: string;
   onSaveDefaults: (settings: Record<string, GameSdkSettingValue>) => void;
   setMessage: (message: string) => void;
   run: (operation: () => Promise<PackageRoom>) => Promise<PackageRoom | null>;
@@ -31,6 +34,9 @@ export function GameSdkLobbyPanel({
   pending,
   defaultsEndpoint,
   previewOnly,
+  gameId,
+  creatorSlug,
+  packageRevision,
   onSaveDefaults,
   setMessage,
   run,
@@ -43,7 +49,22 @@ export function GameSdkLobbyPanel({
     if (copyingInvite) return;
     setCopyingInvite(true);
     try {
-      const inviteUrl = `${window.location.origin}/join/${encodeURIComponent(room.code)}`;
+      const response = await fetch("/api/room-invites", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          providerKind: previewOnly ? "sdk-preview" : "sdk-approved",
+          gameNamespace: gameId,
+          displayCode: room.code,
+          sourceCreatorSlug: creatorSlug,
+          sourceGameId: gameId,
+          packageRevision,
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { href?: string };
+      if (!response.ok || !payload.href) throw new Error("ROOM_INVITE_ISSUE_FAILED");
+      const inviteUrl = new URL(payload.href, window.location.origin).toString();
       await navigator.clipboard.writeText(inviteUrl);
       setMessage("招待リンクをコピーしました。");
     } catch {

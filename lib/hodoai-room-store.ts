@@ -7,6 +7,7 @@ import {
   applyOnlineRoomDebugParticipantCommand,
 } from "@/lib/online-room-debug-participants";
 import { createPlatformOnlineRoomStoreRuntime } from "@/lib/online-room-store-runtime";
+import { expectedRoomInstanceIdFrom } from "@/lib/room-invite-target";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import { normalizeHodoaiRoom } from "@/lib/hodoai-room-normalizer";
@@ -78,8 +79,10 @@ async function mutateStoredRoom(
   code: string,
   mutate: (room: HodoaiRoom) => HodoaiRoom,
   debugEvent?: HodoaiDebugEvent,
+  expectedRoomInstanceId?: string,
 ) {
   return roomRuntime.mutate(code, mutate, {
+    expectedRoomInstanceId,
     prepare: (current, changed, { revision, timestamp }) => {
       const actorName = debugEvent?.actorId
         ? changed.players.find((player) => player.id === debugEvent.actorId)?.name ?? "不明なプレイヤー"
@@ -301,7 +304,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       return { ...current, order: [...current.cards].sort((left, right) => current.values[left.id] - current.values[right.id]).map((card) => card.id) };
     }
     return current;
-  }, { actorId: action.actorId, action: hodoaiDebugActionLabels[action.type] }).catch(async (error) => {
+  }, { actorId: action.actorId, action: hodoaiDebugActionLabels[action.type] }, expectedRoomInstanceIdFrom(action)).catch(async (error) => {
     if (action.type === "join-room" && claim === "claimed") {
       await roomRuntime.release(action.actorId, code);
     }

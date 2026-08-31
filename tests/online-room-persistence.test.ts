@@ -33,7 +33,8 @@ test("部屋CASと新規作成は共通Redis契約を使う", async () => {
       conflictError: "ROOM_CONFLICT",
     });
     assert.equal(commands[0]?.[0], "EVAL");
-    assert.match(String(commands[0]?.[1]), /if not active or string\.upper\(active\)==string\.upper\(ARGV\[4\]\)/);
+    assert.match(String(commands[0]?.[1]), /current\.roomInstanceId~=ARGV\[4\]/);
+    assert.match(String(commands[0]?.[1]), /if not active or string\.upper\(active\)==string\.upper\(ARGV\[5\]\)/);
     assert.deepEqual(commands[0]?.slice(2, 6), ["3", "game:room:AB12", ...activeRoomKeys]);
     assert.equal(commands[0]?.at(-1), "AB12");
     assert.equal(commands.length, 2);

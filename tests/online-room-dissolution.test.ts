@@ -20,10 +20,12 @@ test("部屋解散時の部屋・一覧・参加者索引削除を1 Redis comman
       roomKey: "game:room:AB12",
       roomIndexKey: "game:rooms",
       playerActiveRoomKeys: ["game:active:p1", "game:active:p2", "game:active:p1"],
+      expectedRoomInstanceId: "room-instance-0001",
     });
     assert.equal(commands.length, 1);
     assert.equal(commands[0]?.[0], "EVAL");
-    assert.deepEqual(commands[0]?.slice(2), ["4", "game:room:AB12", "game:rooms", "game:active:p1", "game:active:p2", "AB12"]);
+    assert.match(String(commands[0]?.[1]), /current\.roomInstanceId or current\.creationRequestId/);
+    assert.deepEqual(commands[0]?.slice(2), ["4", "game:room:AB12", "game:rooms", "game:active:p1", "game:active:p2", "AB12", "room-instance-0001"]);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;

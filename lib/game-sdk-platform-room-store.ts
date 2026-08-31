@@ -21,6 +21,7 @@ import { publishOnlineRoomRevision } from "./online-room-realtime-server.ts";
 import { deleteIndexedOnlineRoomStorage } from "./online-room-dissolution.ts";
 import { schedulePostResponseWork } from "./post-response-work.ts";
 import { redisCommand } from "./redis-store.ts";
+import { compareAndDeleteRoomInviteForPrimary } from "./room-invite-store.ts";
 import {
   resolveGameFieldsEnvironment,
   type GameFieldsEnvironment,
@@ -228,11 +229,24 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
   );
 
   const deleteStorage = async (record: GameFieldsPlatformRoomRecord<TRoom>) => {
+    const resolvedEnvironment = resolveGameFieldsEnvironment(environment);
+    await compareAndDeleteRoomInviteForPrimary({
+      environment: resolvedEnvironment,
+      providerKind: resolvedEnvironment === "candidate-preview"
+        ? "sdk-preview"
+        : "sdk-approved",
+      gameNamespace: gameId,
+      displayCode: record.code,
+      roomInstanceId: record.creationRequestId,
+      packageRevision: record.runtimeContract.packageRevision,
+      packageRootSha256: record.runtimeContract.packageRootSha256,
+    });
     await deleteIndexedOnlineRoomStorage({
       roomCode: record.code,
       roomKey: roomKey(record.code),
       roomIndexKey: indexKey,
       playerActiveRoomKeys: roomPlayerIds(record).map(activeKey),
+      expectedRoomInstanceId: record.creationRequestId,
     });
   };
 

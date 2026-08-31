@@ -3,6 +3,7 @@ import { redisCommand } from "./redis-store.ts";
 
 type IndexedOnlineRoom = {
   code: string;
+  roomInstanceId?: string;
   hostId: string;
   phase: string;
   players: Array<{ id: string }>;
@@ -22,6 +23,7 @@ type IndexedRoomDissolutionOptions<Room extends IndexedOnlineRoom> = {
   playerActiveRoomKey: (playerId: string) => string;
   errors: DissolutionErrors;
   loadRoom: (code: string) => Promise<Room | null>;
+  beforeDelete?: (room: Room) => Promise<unknown>;
 };
 
 export async function deleteIndexedOnlineRoomStorage(options: {
@@ -29,15 +31,17 @@ export async function deleteIndexedOnlineRoomStorage(options: {
   roomKey: string;
   roomIndexKey: string;
   playerActiveRoomKeys: string[];
+  expectedRoomInstanceId?: string;
 }) {
   const playerActiveRoomKeys = [...new Set(options.playerActiveRoomKeys.filter(Boolean))];
   const keys = [options.roomKey, options.roomIndexKey, ...playerActiveRoomKeys];
-  await redisCommand<number>([
+  return redisCommand<number>([
     "EVAL",
-    "redis.call('DEL',KEYS[1]); redis.call('SREM',KEYS[2],ARGV[1]); for i=3,#KEYS do local current=redis.call('GET',KEYS[i]); if current and string.upper(current)==string.upper(ARGV[1]) then redis.call('DEL',KEYS[i]) end end; return 1",
+    "local raw=redis.call('GET',KEYS[1]); if ARGV[2]~='' then if not raw then return 0 end; local current=cjson.decode(raw); if (current.roomInstanceId or current.creationRequestId)~=ARGV[2] then return 0 end end; redis.call('DEL',KEYS[1]); redis.call('SREM',KEYS[2],ARGV[1]); for i=3,#KEYS do local current=redis.call('GET',KEYS[i]); if current and string.upper(current)==string.upper(ARGV[1]) then redis.call('DEL',KEYS[i]) end end; return 1",
     String(keys.length),
     ...keys,
     options.roomCode,
+    options.expectedRoomInstanceId ?? "",
   ]);
 }
 
@@ -45,11 +49,13 @@ async function releaseIndexedRoom<Room extends IndexedOnlineRoom>(
   room: Room,
   options: IndexedRoomDissolutionOptions<Room>,
 ) {
+  await options.beforeDelete?.(room);
   await deleteIndexedOnlineRoomStorage({
     roomCode: room.code,
     roomKey: options.roomKey(room.code),
     roomIndexKey: options.roomIndexKey,
     playerActiveRoomKeys: room.players.map((player) => options.playerActiveRoomKey(player.id)),
+    expectedRoomInstanceId: room.roomInstanceId,
   });
 }
 

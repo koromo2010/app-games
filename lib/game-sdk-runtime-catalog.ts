@@ -351,6 +351,8 @@ export async function loadApprovedGameSdkRuntimeRegistration(
     clientRuntimeUrl: payload.clientRuntimeUrl,
     deployment: "main",
     revision: payload.revision,
+    sourceCreatorSlug: payload.creatorSlug,
+    sourceGameId: payload.sourceGameId,
     packageRootSha256: payload.packageRootSha256,
     serverBundleSha256: payload.serverBundleSha256,
     appSetSourceSha256: payload.appSetSourceSha256,

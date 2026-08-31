@@ -462,6 +462,9 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
             pending={pending}
             defaultsEndpoint={defaultsEndpoint}
             previewOnly={previewOnly}
+            gameId={gameId}
+            creatorSlug={creatorSlug}
+            packageRevision={packageRevision}
             onSaveDefaults={onSaveDefaults}
             setMessage={setMessage}
             run={run}

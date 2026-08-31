@@ -627,6 +627,12 @@ export function createGameFieldsPlatformRuntime<
       );
       if (!record) throw new GameFieldsPlatformRuntimeError("ROOM_NOT_FOUND", 404);
       assertStoredRecord(record, module.manifest.id, code, runtimeContract);
+      if (
+        envelope.expectedRoomInstanceId
+        && envelope.expectedRoomInstanceId !== record.creationRequestId
+      ) {
+        throw new GameFieldsPlatformRuntimeError("ROOM_RUNTIME_MISMATCH", 409);
+      }
       const timestamp = now();
       const actor = trustedActor(identity, record.hostPlayerId);
       const presenter = trustedActor(

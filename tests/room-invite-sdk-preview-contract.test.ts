@@ -2,48 +2,22 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("shared room invites resolve and join SDK Preview rooms by pinned revision", () => {
-  const previewRoute = readFileSync(
-    "app/api/sdk-preview/[creatorSlug]/games/[gameId]/rooms/route.ts",
-    "utf8",
-  );
-  const resolver = readFileSync(
-    "app/api/room-invites/[roomCode]/route.ts",
-    "utf8",
-  );
-  const joiner = readFileSync(
-    "app/join/[roomCode]/InviteRoomJoiner.tsx",
-    "utf8",
-  );
-  const previewPage = readFileSync(
-    "app/sdk-preview/[creatorSlug]/games/[gameId]/page.tsx",
-    "utf8",
-  );
-  const inviteIndex = readFileSync(
-    "lib/sdk-preview-room-invite-index.ts",
-    "utf8",
-  );
-  const lobby = readFileSync(
-    "app/components/game-sdk/GameSdkLobbyPanel.tsx",
-    "utf8",
-  );
-
-  assert.match(previewRoute, /scheduleSdkPreviewRoomInviteIndexSuccess/);
-  assert.doesNotMatch(previewRoute, /saveSdkPreviewRoomInviteTarget/);
-  assert.doesNotMatch(previewRoute, /deleteSdkPreviewRoomInviteTarget/);
-  assert.match(inviteIndex, /operation === "create"/);
-  assert.match(inviteIndex, /operation === "command"/);
-  assert.match(inviteIndex, /commandApplied === true/);
-  assert.match(inviteIndex, /operation === "dissolve"/);
-  assert.match(inviteIndex, /affected === 1/);
-  assert.match(inviteIndex, /mode: "best-effort"/);
-  assert.match(previewRoute, /revision: requestedRevision/);
-  assert.match(resolver, /loadSdkPreviewRoomInviteTarget/);
-  assert.match(resolver, /kind: "sdk-preview"/);
-  assert.match(joiner, /room\/join/);
-  assert.match(joiner, /expectedRevision/);
-  assert.match(joiner, /\/api\/room-invites\//);
-  assert.match(previewPage, /rooms\?revision=/);
-  assert.match(lobby, /招待リンクをコピー/);
-  assert.match(lobby, /\/join\//);
+test("shared Room invites use opaque canonical targets and pinned SDK identity", () => {
+  const previewRoute = readFileSync("app/api/sdk-preview/[creatorSlug]/games/[gameId]/rooms/route.ts", "utf8");
+  const resolver = readFileSync("app/api/room-invites/[roomCode]/route.ts", "utf8");
+  const canonicalJoiner = readFileSync("app/join/i/[inviteRef]/CanonicalInviteJoiner.tsx", "utf8");
+  const legacyJoiner = readFileSync("app/join/[roomCode]/InviteRoomJoiner.tsx", "utf8");
+  const lobby = readFileSync("app/components/game-sdk/GameSdkLobbyPanel.tsx", "utf8");
+  const issueRoute = readFileSync("app/api/room-invites/route.ts", "utf8");
+  assert.doesNotMatch(previewRoute, /scheduleSdkPreviewRoomInviteIndexSuccess/);
+  assert.match(resolver, /loadCanonicalRoomInvite/);
+  assert.match(resolver, /revalidateCanonicalRoomInviteTarget/);
+  assert.match(resolver, /expectedRoomInstanceId/);
+  assert.match(resolver, /expectedRevision/);
+  assert.match(canonicalJoiner, /method: "POST"/);
+  assert.doesNotMatch(legacyJoiner, /fetch\(/);
+  assert.match(legacyJoiner, /一意に証明できない/);
+  assert.match(lobby, /providerKind: previewOnly \? "sdk-preview" : "sdk-approved"/);
+  assert.match(lobby, /packageRevision/);
+  assert.match(issueRoute, /\/join\/i\//);
 });

@@ -38,6 +38,7 @@ import {
   applyOnlineRoomDebugParticipantCommand,
 } from "@/lib/online-room-debug-participants";
 import { createPlatformOnlineRoomStoreRuntime } from "@/lib/online-room-store-runtime";
+import { expectedRoomInstanceIdFrom } from "@/lib/room-invite-target";
 import type { ActiveRoomClaim } from "@/lib/player-active-room";
 import { recordCodeInterceptGameResults } from "@/lib/player-stats-store";
 import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
@@ -101,8 +102,10 @@ async function mutateStoredRoom(
   ) => CodeInterceptRoom | Promise<CodeInterceptRoom>,
   actorId: string,
   action: string,
+  expectedRoomInstanceId?: string,
 ) {
   return roomRuntime.mutate(code, mutate, {
+    expectedRoomInstanceId,
     prepare: (current, changed, { revision, timestamp }) => {
       const actorName = changed.players.find(
         (player) => player.id === actorId,
@@ -358,7 +361,7 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
       return finishCodeInterceptRound({ ...current, allyAnswers, interceptAnswers });
     }
     return current;
-  }, action.actorId, debugActionLabels[action.type]).catch(async (error) => {
+  }, action.actorId, debugActionLabels[action.type], expectedRoomInstanceIdFrom(action)).catch(async (error) => {
     if (action.type === "join-room" && claim === "claimed") {
       await roomRuntime.release(action.actorId, normalizedCode);
     }

@@ -25,6 +25,7 @@ import {
   applyOnlineRoomDebugParticipantCommand,
 } from "@/lib/online-room-debug-participants";
 import { createPlatformOnlineRoomStoreRuntime } from "@/lib/online-room-store-runtime";
+import { expectedRoomInstanceIdFrom } from "@/lib/room-invite-target";
 import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import { beginGame, resetGame, withPlayersAndCorrectedConfig } from "@/lib/nigoichi-room-domain";
 import { normalizeAssociationWords, normalizeNigoichiRoom, normalizeWordDifficulty } from "@/lib/nigoichi-room-normalizer";
@@ -78,8 +79,10 @@ async function mutateStoredRoom(
   code: string,
   mutate: (room: NigoichiRoom) => NigoichiRoom | Promise<NigoichiRoom>,
   debugEvent?: DebugEvent,
+  expectedRoomInstanceId?: string,
 ) {
   return roomRuntime.mutate(code, mutate, {
+    expectedRoomInstanceId,
     prepare: (current, changed, { revision, timestamp }) => {
       const actorName = debugEvent?.actorId
         ? changed.players.find((player) => player.id === debugEvent.actorId)?.name ?? "不明なプレイヤー"
@@ -295,7 +298,7 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
       return finishNigoichiRound({ ...current, guesses });
     }
     return current;
-  }, { actorId: action.actorId, action: debugActionLabels[action.type] }).catch(async (error) => {
+  }, { actorId: action.actorId, action: debugActionLabels[action.type] }, expectedRoomInstanceIdFrom(action)).catch(async (error) => {
     if (action.type === "join-room" && claim === "claimed") {
       await roomRuntime.release(action.actorId, normalizedCode);
     }

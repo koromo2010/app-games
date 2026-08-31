@@ -19,6 +19,7 @@ export type OnlineRoomRouteSession = Awaited<ReturnType<typeof requireAuthentica
 
 export type OnlineRoomRouteRoom = {
   code: string;
+  roomInstanceId?: string;
   revision: number;
   contentLocale?: unknown;
   players: Array<{ id: string }>;
@@ -47,6 +48,7 @@ export type OnlineRoomCommandContext<Room extends OnlineRoomRouteRoom> = Mutatio
   code: string;
   action: Record<string, unknown>;
   targetRoom: Room | null;
+  expectedRoomInstanceId?: string;
 };
 
 type DeleteContext = MutationContext & {
@@ -89,6 +91,13 @@ function isResponse(value: unknown): value is Response {
   return value instanceof Response;
 }
 
+function minimizedRoomPresentation(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const safe = { ...(value as Record<string, unknown>) };
+  delete safe.roomInstanceId;
+  return safe;
+}
+
 export function createOnlineRoomRouteHandlers<Room extends OnlineRoomRouteRoom, Choice = unknown>(
   config: OnlineRoomRouteConfig<Room, Choice>,
 ) {
@@ -114,11 +123,11 @@ export function createOnlineRoomRouteHandlers<Room extends OnlineRoomRouteRoom, 
         }
         if (config.read.afterLoad) room = await config.read.afterLoad(room, authenticatedPlayerId);
         return config.read.versioned === false
-          ? conditionalJsonResponse(request, { room: config.read.presentRoom(room, authenticatedPlayerId) })
+          ? conditionalJsonResponse(request, { room: minimizedRoomPresentation(config.read.presentRoom(room, authenticatedPlayerId)) })
           : conditionalVersionedJsonResponse(
               request,
               `${config.gameId}:${room.code}:${room.revision}:${authenticatedPlayerId}`,
-              () => ({ room: config.read.presentRoom(room, authenticatedPlayerId) }),
+              () => ({ room: minimizedRoomPresentation(config.read.presentRoom(room, authenticatedPlayerId)) }),
             );
       }
 
@@ -127,11 +136,11 @@ export function createOnlineRoomRouteHandlers<Room extends OnlineRoomRouteRoom, 
         if (room && config.read.afterLoad) room = await config.read.afterLoad(room, authenticatedPlayerId);
         if (!room) return conditionalJsonResponse(request, { room: null });
         return config.read.versioned === false
-          ? conditionalJsonResponse(request, { room: config.read.presentRoom(room, authenticatedPlayerId) })
+          ? conditionalJsonResponse(request, { room: minimizedRoomPresentation(config.read.presentRoom(room, authenticatedPlayerId)) })
           : conditionalVersionedJsonResponse(
               request,
               `${config.gameId}:${room.code}:${room.revision}:${authenticatedPlayerId}`,
-              () => ({ room: config.read.presentRoom(room, authenticatedPlayerId) }),
+              () => ({ room: minimizedRoomPresentation(config.read.presentRoom(room, authenticatedPlayerId)) }),
             );
       }
 
@@ -189,7 +198,7 @@ export function createOnlineRoomRouteHandlers<Room extends OnlineRoomRouteRoom, 
         roomDraft: authenticatedRoomDraft(body.room, session, config.gameId),
       });
       telemetry.success("room.mutation", { ...fields, ...config.telemetryFields(room) });
-      return Response.json({ room: config.read.presentRoom(room, session.id) });
+      return Response.json({ room: minimizedRoomPresentation(config.read.presentRoom(room, session.id)) });
     } catch (error) {
       const response = config.errorResponse(error, "create");
       telemetry.responseError("room.mutation", error, response.status, fields);
@@ -217,6 +226,9 @@ export function createOnlineRoomRouteHandlers<Room extends OnlineRoomRouteRoom, 
         ...(body.action as Record<string, unknown>),
         actorId: session.id,
       };
+      const expectedRoomInstanceId = typeof body.expectedRoomInstanceId === "string"
+        ? body.expectedRoomInstanceId.trim()
+        : undefined;
       if (actionRequiresDebugAccess(action, session.id)) await requirePlayerDebugAccess(session.id);
       fields = {
         action: actionName(action),
@@ -224,22 +236,40 @@ export function createOnlineRoomRouteHandlers<Room extends OnlineRoomRouteRoom, 
         actorRef: telemetry.actorRef(session.id),
       };
       let targetRoom: Room | null = null;
-      if (action.type === "join-room" && isLanguageBoundGame(config.gameId)) {
+      if (action.type === "join-room" && (isLanguageBoundGame(config.gameId) || expectedRoomInstanceId)) {
         targetRoom = await config.read.loadRoom(code);
         if (!targetRoom) return Response.json({ error: "Room not found" }, { status: 404 });
-        assertRoomContentLanguageAccess(
-          config.gameId,
-          targetRoom,
-          action.contentLanguage ?? body.contentLanguage ?? session.locale,
-        );
+        if (expectedRoomInstanceId && targetRoom.roomInstanceId !== expectedRoomInstanceId) {
+          return Response.json({ error: "Room invite target changed" }, { status: 409 });
+        }
+        if (isLanguageBoundGame(config.gameId)) {
+          assertRoomContentLanguageAccess(
+            config.gameId,
+            targetRoom,
+            action.contentLanguage ?? body.contentLanguage ?? session.locale,
+          );
+        }
       }
       if (action.type === "join-room") {
-        action = { ...action, player: authenticatedRoomPlayer(session) };
+        action = {
+          ...action,
+          player: authenticatedRoomPlayer(session),
+          ...(expectedRoomInstanceId ? { expectedRoomInstanceId } : {}),
+        };
       }
-      const result = await config.command({ request, session, telemetry, body, code, action, targetRoom });
+      const result = await config.command({
+        request,
+        session,
+        telemetry,
+        body,
+        code,
+        action,
+        targetRoom,
+        expectedRoomInstanceId,
+      });
       if (isResponse(result)) return result;
       telemetry.success("room.command", { ...fields, ...config.telemetryFields(result) });
-      return Response.json({ room: config.read.presentRoom(result, session.id) });
+      return Response.json({ room: minimizedRoomPresentation(config.read.presentRoom(result, session.id)) });
     } catch (error) {
       const response = config.errorResponse(error, "command");
       telemetry.responseError("room.command", error, response.status, fields);
