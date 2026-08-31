@@ -57,6 +57,17 @@ test("TOTP enrollment and reset remain same-owner recent-MFA operations without 
   assert.match(panel, /Authenticatorの6桁コード/);
 });
 
+test("Migration 011 TOTP step-up requires a full owner session and records no code or credential", () => {
+  const route = read("app/api/admin/passkeys/route.ts");
+  const panel = read("app/site-admin/runtime-operations/sdk-migration-011/SdkMigration011OperatorPanel.tsx");
+  const stepUp = read("lib/sdk-migration-011-step-up-client.ts");
+  assert.match(route, /action === "begin-totp-step-up"[\s\S]*requireFullSiteAdminSession\(\)[\s\S]*isRecentSiteAdminMfa\(session\)[\s\S]*siteAdminTotpStatus\(session\.email\)/);
+  assert.match(route, /action === "verify-totp"[\s\S]*challenge\.purpose === "step-up" \? await requireFullSiteAdminSession\(\)/);
+  assert.doesNotMatch(route, /appendSiteAdminAuditLog\([^\n]*totpCode/);
+  assert.match(panel, /autoComplete="one-time-code"/);
+  assert.doesNotMatch(panel + stepUp, /localStorage|sessionStorage|console\.|document\.cookie/);
+});
+
 test("TOTP storage encrypts secrets and atomically rejects replay while rate limiting failures", () => {
   const core = read("lib/site-admin-totp-core.ts");
   const store = read("lib/site-admin-totp-store.ts");

@@ -1,15 +1,59 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { type FormEvent, useState } from "react";
 import {
   createSingleUseMigration011Submitter,
   type SdkMigration011ClientResult,
 } from "@/lib/sdk-migration-011-client";
+import type { SdkMigration011PageAccess } from "@/lib/sdk-migration-011-page-access";
+import {
+  performSdkMigration011TotpStepUp,
+  type SdkMigration011StepUpFailureCode,
+} from "@/lib/sdk-migration-011-step-up-client";
 
-export function SdkMigration011OperatorPanel() {
+const stepUpFailureMessages: Record<SdkMigration011StepUpFailureCode, string> = {
+  INVALID_TOTP_FORMAT: "Authenticatorの6桁コードを入力してください。",
+  ADMIN_AUTH_REQUIRED: "full Site Adminセッションを確認できません。ログイン画面へ戻って停止してください。",
+  ADMIN_FULL_AUTH_REQUIRED: "full Site Admin権限を確認できません。操作を停止してください。",
+  ADMIN_STEP_UP_REQUIRED: "recent MFAを確認できません。操作を停止してください。",
+  SITE_ADMIN_TOTP_UNAVAILABLE: "このSite AdminではAuthenticator step-upを利用できません。",
+  SITE_ADMIN_CHALLENGE_EXPIRED: "Authenticator challengeを確認できません。新しい操作として停止してください。",
+  INVALID_TOTP_CODE: "Authenticatorコードを確認できませんでした。",
+  RATE_LIMITED: "Authenticator確認の試行上限に達しました。操作を停止してください。",
+  INVALID_RESPONSE: "Authenticator確認の応答を安全に確認できません。操作を停止してください。",
+  TRANSPORT_FAILED: "Authenticator確認の通信結果が不明です。操作を停止してください。",
+};
+
+export function SdkMigration011OperatorPanel({
+  initialAccess,
+}: {
+  initialAccess: SdkMigration011PageAccess;
+}) {
+  const router = useRouter();
   const [submitter] = useState(() => createSingleUseMigration011Submitter());
   const [result, setResult] = useState<SdkMigration011ClientResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
+  const [stepUpSubmitting, setStepUpSubmitting] = useState(false);
+  const [stepUpFailure, setStepUpFailure] = useState<SdkMigration011StepUpFailureCode | null>(null);
+  const [awaitingServerReevaluation, setAwaitingServerReevaluation] = useState(false);
+
+  const submitStepUp = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (stepUpSubmitting || awaitingServerReevaluation) return;
+    setStepUpSubmitting(true);
+    setStepUpFailure(null);
+    const next = await performSdkMigration011TotpStepUp(totpCode);
+    setTotpCode("");
+    setStepUpSubmitting(false);
+    if (next.kind === "failed") {
+      setStepUpFailure(next.code);
+      return;
+    }
+    setAwaitingServerReevaluation(true);
+    router.refresh();
+  };
 
   const submit = async () => {
     if (submitting || result) return;
@@ -18,6 +62,48 @@ export function SdkMigration011OperatorPanel() {
     setResult(next);
     setSubmitting(false);
   };
+
+  if (initialAccess === "step-up-required") return (
+    <section className="rounded-2xl border border-cyan-300/25 bg-cyan-300/10 p-5">
+      <h2 className="text-lg font-black text-cyan-100">Authenticator確認</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-200">
+        full Site Adminセッションは有効です。Migration 011の実行前に、登録済みAuthenticatorの6桁コードでrecent MFAを更新してください。
+      </p>
+      <p className="mt-2 text-xs leading-5 text-slate-400">
+        成功後はこのoperator画面をサーバーで再評価します。Migration 011は自動実行されません。
+      </p>
+      <form className="mt-5 space-y-3" onSubmit={submitStepUp}>
+        <label htmlFor="migration-011-totp" className="block text-sm font-bold text-cyan-50">
+          Authenticatorの6桁コード
+        </label>
+        <input
+          id="migration-011-totp"
+          type="password"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          pattern="[0-9]{6}"
+          maxLength={6}
+          required
+          value={totpCode}
+          onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+          disabled={stepUpSubmitting || awaitingServerReevaluation}
+          className="w-full rounded-xl border border-cyan-200/30 bg-slate-950 px-4 py-3 font-mono text-lg tracking-[0.35em] text-white outline-none focus:border-cyan-200 disabled:opacity-50"
+        />
+        <button
+          type="submit"
+          disabled={stepUpSubmitting || awaitingServerReevaluation || totpCode.length !== 6}
+          className="w-full rounded-xl bg-cyan-300 px-4 py-3 font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {awaitingServerReevaluation ? "operator画面を再確認中…" : stepUpSubmitting ? "確認中…" : "Authenticatorを確認"}
+        </button>
+      </form>
+      {stepUpFailure && (
+        <p role="alert" className="mt-4 rounded-xl border border-rose-300/30 bg-rose-300/10 p-4 text-sm text-rose-50">
+          {stepUpFailureMessages[stepUpFailure]}
+        </p>
+      )}
+    </section>
+  );
 
   return (
     <section className="rounded-2xl border border-amber-300/25 bg-amber-300/10 p-5">

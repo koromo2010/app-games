@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { requireRecentSiteAdminMfa } from "@/lib/site-admin-auth";
-import { requireSdkMigration011PageAccess } from "@/lib/sdk-migration-011-page-access";
+import { requireFullSiteAdminSession } from "@/lib/site-admin-auth";
+import { isRecentSiteAdminMfa } from "@/lib/site-admin-auth-core";
+import {
+  requireSdkMigration011PageAccess,
+  type SdkMigration011PageAccess,
+} from "@/lib/sdk-migration-011-page-access";
 import { SdkMigration011OperatorPanel } from "./SdkMigration011OperatorPanel";
 
 export const dynamic = "force-dynamic";
@@ -15,19 +19,25 @@ export const metadata: Metadata = {
 };
 
 export default async function SdkMigration011OperatorPage() {
+  let access: SdkMigration011PageAccess;
   try {
-    await requireSdkMigration011PageAccess({
+    access = await requireSdkMigration011PageAccess({
       runtimeIdentity: () => ({
         semanticEnvironment: process.env.APP_ENV,
         vercelEnvironment: process.env.VERCEL_ENV,
         project: process.env.VERCEL_PROJECT_NAME,
         ref: process.env.VERCEL_GIT_COMMIT_REF,
       }),
-      requireRecentMfa: async () => { await requireRecentSiteAdminMfa(); },
+      requireFullSession: async () => {
+        const session = await requireFullSiteAdminSession();
+        return { recentMfa: isRecentSiteAdminMfa(session) };
+      },
     });
   } catch (error) {
     if (error instanceof Error && error.message === "DEVELOPMENT_RUNTIME_REQUIRED") notFound();
-    redirect("/admin");
+    if (error instanceof Error && error.message === "SITE_ADMIN_AUTH_REQUIRED") redirect("/admin");
+    if (error instanceof Error && error.message === "SITE_ADMIN_FULL_AUTH_REQUIRED") redirect("/admin");
+    throw error;
   }
 
   return (
@@ -40,7 +50,7 @@ export default async function SdkMigration011OperatorPage() {
             通常のパスワードログインとAuthenticator確認後に使う、Development専用の運用画面です。
           </p>
         </header>
-        <SdkMigration011OperatorPanel />
+        <SdkMigration011OperatorPanel initialAccess={access} />
       </div>
     </main>
   );
