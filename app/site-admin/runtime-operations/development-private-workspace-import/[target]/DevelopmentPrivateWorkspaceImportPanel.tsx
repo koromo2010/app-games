@@ -14,6 +14,7 @@ import {
   verifyDevelopmentPrivateWorkspaceImportFile,
   type DevelopmentPrivateWorkspaceImportAcceptance,
   type DevelopmentPrivateWorkspaceImportClientPlan,
+  type DevelopmentPrivateWorkspaceImportPlanAccess,
   type VerifiedDevelopmentPrivateWorkspaceImportFile,
 } from "@/lib/development-private-workspace-import-client";
 import type { DevelopmentPrivateWorkspaceImportPageAccess } from "@/lib/development-private-workspace-import-page-access";
@@ -100,6 +101,9 @@ export function DevelopmentPrivateWorkspaceImportPanel({
   const [runtimeStepUpRequired, setRuntimeStepUpRequired] = useState(false);
   const [awaitingServerReevaluation, setAwaitingServerReevaluation] = useState(false);
   const [operationState, setOperationState] = useState<OperationState>("idle");
+  const [targetState, setTargetState] = useState<DevelopmentPrivateWorkspaceImportPlanAccess | null>(null);
+  const [targetStateChecking, setTargetStateChecking] = useState(false);
+  const [targetStateLocked, setTargetStateLocked] = useState(false);
   const [verified, setVerified] = useState<VerifiedDevelopmentPrivateWorkspaceImportFile | null>(null);
   const [plan, setPlan] = useState<DevelopmentPrivateWorkspaceImportClientPlan | null>(null);
   const [acceptance, setAcceptance] = useState<DevelopmentPrivateWorkspaceImportAcceptance | null>(null);
@@ -152,6 +156,34 @@ export function DevelopmentPrivateWorkspaceImportPanel({
     setOperationState("verified");
   };
 
+  const checkTargetState = async () => {
+    if (targetStateLocked || planUsed.current || executeUsed.current) return;
+    setTargetStateLocked(true);
+    setTargetStateChecking(true);
+    setTargetState(null);
+    setMessage("");
+    const planPath = `/api/admin/sdk-development-private-workspace-import/${encodeURIComponent(target)}/plan`;
+    try {
+      const response = await fetch(planPath, { method: "GET", cache: "no-store" });
+      const payload = await readPayload(response);
+      const parsed = response.ok
+        ? parseDevelopmentPrivateWorkspaceImportPlanAccess(payload, target)
+        : null;
+      if (!parsed) {
+        const error = payload && typeof (payload as Record<string, unknown>).error === "string"
+          ? String((payload as Record<string, unknown>).error)
+          : "DEVELOPMENT_PRIVATE_IMPORT_UNAVAILABLE";
+        setMessage(`read-only target stateを確認できません (${error})。bundleやplanは送信していません。`);
+        return;
+      }
+      setTargetState(parsed);
+    } catch {
+      setMessage("read-only target stateの通信結果が不明です。bundleやplanは送信していません。");
+    } finally {
+      setTargetStateChecking(false);
+    }
+  };
+
   const requestPlan = async () => {
     if (!verified || planUsed.current || executeUsed.current) return;
     setOperationState("planning");
@@ -183,6 +215,12 @@ export function DevelopmentPrivateWorkspaceImportPanel({
       setMessage("plan送信前の認証状態を安全に確認できません。planは送信していません。");
       return;
     }
+    setTargetState(access);
+    if (!access.ready) {
+      setOperationState("stopped");
+      setMessage("Development target stateがimport前提と一致しません。bundleとplanは送信していません。");
+      return;
+    }
     planUsed.current = true;
     setPlanLocked(true);
     try {
@@ -199,8 +237,12 @@ export function DevelopmentPrivateWorkspaceImportPanel({
         ? parseDevelopmentPrivateWorkspaceImportPlan(payload, target)
         : null;
       if (!parsed) {
+        const error = payload && typeof (payload as Record<string, unknown>).error === "string"
+          && /^DEVELOPMENT_PRIVATE_IMPORT_[A-Z0-9_]+$/.test(String((payload as Record<string, unknown>).error))
+          ? String((payload as Record<string, unknown>).error)
+          : "DEVELOPMENT_PRIVATE_IMPORT_INVALID_RESPONSE";
         setOperationState("stopped");
-        setMessage("write-free planを安全に確認できません。planは再送しません。");
+        setMessage(`write-free planは受理されませんでした (${error})。planは再送しません。`);
         return;
       }
       setPlan(parsed);
@@ -324,6 +366,29 @@ export function DevelopmentPrivateWorkspaceImportPanel({
 
   return (
     <div className="space-y-5">
+      <section className="rounded-2xl border border-cyan-300/25 bg-cyan-300/10 p-5">
+        <h2 className="text-lg font-black text-cyan-100">Read-only target state</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-200">
+          bundleを送らず、現在のtarget行数とprivate workspace import前提だけを1回確認します。
+        </p>
+        <button
+          type="button"
+          onClick={() => void checkTargetState()}
+          disabled={targetStateLocked || planLocked || executeLocked}
+          className="mt-4 w-full rounded-xl border border-cyan-200/40 px-4 py-3 font-black text-cyan-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {targetStateChecking ? "read-only確認中…" : targetStateLocked ? "read-only確認済み" : "target stateをread-onlyで確認"}
+        </button>
+        {targetState && <div data-private-workspace-import-target-state={targetState.ready ? "ready" : "blocked"} className="mt-4 rounded-xl border border-white/15 bg-black/20 p-4 text-sm text-slate-100">
+          <p className="font-black">TARGET STATE: {targetState.ready ? "READY" : "BLOCKED"}</p>
+          <p className="mt-2">creator {targetState.counts.creatorRows} / deleted {targetState.counts.deletedCreatorRows} / owner {targetState.counts.creatorOwnerRows}</p>
+          <p className="mt-1">games {targetState.counts.gameRows} / deleted {targetState.counts.deletedGameRows} / active {targetState.counts.activeGameRows}</p>
+          <p className="mt-1">releases {targetState.counts.releaseRows} / current {targetState.counts.currentReleaseRows}</p>
+          <p className="mt-1">workspace {targetState.counts.workspaceRows} / games {targetState.counts.workspaceGameRows} / files {targetState.counts.workspaceFileRows}</p>
+          <p className="mt-1">identity {String(targetState.integrity.creatorIdentityPresent)} / state tokens {String(targetState.integrity.sourceStateTokenValid && targetState.integrity.publicStateTokenValid && targetState.integrity.unrelatedPrivateStateTokenValid)}</p>
+        </div>}
+      </section>
+
       <section className="rounded-2xl border border-white/10 bg-slate-900 p-5">
         <h2 className="text-lg font-black">Local bundle identity</h2>
         <p className="mt-2 text-sm leading-6 text-slate-300">

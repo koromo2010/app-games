@@ -30,13 +30,34 @@ export async function GET(request: Request, context: { params: Promise<{ target:
     ) {
       return Response.json({ error: "DEVELOPMENT_PRIVATE_IMPORT_INPUT_INVALID" }, { status: 400, headers });
     }
-    return Response.json({
-      schemaVersion: 1,
-      environment: "development",
-      target,
-      phase: "plan-access",
-      ready: true,
-    }, { headers });
+    const url = new URL(
+      `/api/internal/recovery/development-private-workspace-import/${encodeURIComponent(target)}/plan`,
+      sdkPromotionInternalBaseUrl(),
+    ).toString();
+    const response = await fetch(url, {
+      method: "GET",
+      headers: sdkServiceHeaders("GET", url, { environment: "development" }),
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    if (!response.ok) {
+      const error = typeof payload?.error === "string"
+        ? payload.error
+        : "DEVELOPMENT_PRIVATE_IMPORT_UNAVAILABLE";
+      return Response.json({ error }, { status: response.status, headers });
+    }
+    if (
+      payload?.schemaVersion !== 1
+      || payload.environment !== "development"
+      || payload.target !== target
+      || payload.phase !== "target-state"
+      || typeof payload.ready !== "boolean"
+      || !payload.counts
+      || !payload.integrity
+    ) {
+      return Response.json({ error: "DEVELOPMENT_PRIVATE_IMPORT_UNAVAILABLE" }, { status: 502, headers });
+    }
+    return Response.json(payload, { headers });
   } catch (error) {
     return siteAdminAuthorizationError(error) ?? Response.json({
       error: error instanceof Error ? error.message : "DEVELOPMENT_PRIVATE_IMPORT_UNAVAILABLE",

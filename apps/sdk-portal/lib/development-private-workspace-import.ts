@@ -87,6 +87,33 @@ export type DevelopmentPrivateWorkspaceImportBeforeState = {
   unrelatedPrivateStateToken: string;
 };
 
+export type DevelopmentPrivateWorkspaceImportTargetState = {
+  schemaVersion: 1;
+  environment: "development";
+  target: DevelopmentPrivateWorkspaceImportTarget;
+  phase: "target-state";
+  ready: boolean;
+  counts: {
+    creatorRows: number;
+    deletedCreatorRows: number;
+    creatorOwnerRows: number;
+    gameRows: number;
+    deletedGameRows: number;
+    activeGameRows: number;
+    releaseRows: number;
+    currentReleaseRows: number;
+    workspaceRows: number;
+    workspaceGameRows: number;
+    workspaceFileRows: number;
+  };
+  integrity: {
+    creatorIdentityPresent: boolean;
+    sourceStateTokenValid: boolean;
+    publicStateTokenValid: boolean;
+    unrelatedPrivateStateTokenValid: boolean;
+  };
+};
+
 export type DevelopmentPrivateWorkspaceImportReadBack = {
   targetWorkspaceRows: 1;
   targetWorkspaceGameRows: number;
@@ -626,6 +653,56 @@ export function assertDevelopmentPrivateWorkspaceImportBeforeState(
     || !sha256Pattern.test(state.publicStateToken)
     || !sha256Pattern.test(state.unrelatedPrivateStateToken)
   ) fail("DEVELOPMENT_PRIVATE_IMPORT_INVARIANT_UNRESOLVED");
+}
+
+export function projectDevelopmentPrivateWorkspaceImportTargetState(
+  target: DevelopmentPrivateWorkspaceImportTarget,
+  state: DevelopmentPrivateWorkspaceImportBeforeState,
+): DevelopmentPrivateWorkspaceImportTargetState {
+  const spec = developmentPrivateWorkspaceImportTargetSpecs[target];
+  const counts = {
+    creatorRows: state.targetCreatorRows,
+    deletedCreatorRows: state.targetDeletedCreatorRows,
+    creatorOwnerRows: state.targetCreatorOwnerRows,
+    gameRows: state.targetGameRows,
+    deletedGameRows: state.targetDeletedGameRows,
+    activeGameRows: state.targetActiveGameRows,
+    releaseRows: state.targetReleaseRows,
+    currentReleaseRows: state.targetCurrentReleaseRows,
+    workspaceRows: state.targetWorkspaceRows,
+    workspaceGameRows: state.targetWorkspaceGameRows,
+    workspaceFileRows: state.targetWorkspaceFileRows,
+  };
+  const integrity = {
+    creatorIdentityPresent: state.targetCreatorRowId.length > 0,
+    sourceStateTokenValid: sha256Pattern.test(state.sourceStateToken),
+    publicStateTokenValid: sha256Pattern.test(state.publicStateToken),
+    unrelatedPrivateStateTokenValid: sha256Pattern.test(state.unrelatedPrivateStateToken),
+  };
+  const ready = integrity.creatorIdentityPresent
+    && integrity.sourceStateTokenValid
+    && integrity.publicStateTokenValid
+    && integrity.unrelatedPrivateStateTokenValid
+    && counts.creatorRows === 1
+    && counts.deletedCreatorRows === 1
+    && counts.creatorOwnerRows === 0
+    && counts.gameRows === spec.gameCount
+    && counts.deletedGameRows === spec.gameCount
+    && counts.activeGameRows === 0
+    && counts.releaseRows === 0
+    && counts.currentReleaseRows === 0
+    && counts.workspaceRows === 0
+    && counts.workspaceGameRows === 0
+    && counts.workspaceFileRows === 0;
+  return {
+    schemaVersion: 1,
+    environment: "development",
+    target,
+    phase: "target-state",
+    ready,
+    counts,
+    integrity,
+  };
 }
 
 function beforeStateSha256(

@@ -8,6 +8,7 @@ import {
   executeDevelopmentPrivateWorkspaceImport,
   isDevelopmentPrivateWorkspaceImportTarget,
   prepareDevelopmentPrivateWorkspaceImportPlan,
+  projectDevelopmentPrivateWorkspaceImportTargetState,
   readDevelopmentPrivateWorkspaceImportStatus,
   validateDevelopmentPrivateWorkspaceBundle,
   type CompletedDevelopmentPrivateWorkspaceImport,
@@ -489,33 +490,65 @@ test("cross-target workspace rows, non-READY games and owner guesses are rejecte
   }
 });
 
+test("read-only target state projects exact counts and fails closed on any baseline mismatch", () => {
+  const ready = projectDevelopmentPrivateWorkspaceImportTargetState("moi-lab2", before("moi-lab2"));
+  assert.equal(ready.ready, true);
+  assert.deepEqual(ready.counts, {
+    creatorRows: 1,
+    deletedCreatorRows: 1,
+    creatorOwnerRows: 0,
+    gameRows: 2,
+    deletedGameRows: 2,
+    activeGameRows: 0,
+    releaseRows: 0,
+    currentReleaseRows: 0,
+    workspaceRows: 0,
+    workspaceGameRows: 0,
+    workspaceFileRows: 0,
+  });
+  assert.equal(projectDevelopmentPrivateWorkspaceImportTargetState("moi-lab2", {
+    ...before("moi-lab2"), targetWorkspaceRows: 1,
+  }).ready, false);
+  assert.equal(projectDevelopmentPrivateWorkspaceImportTargetState("moi-lab2", {
+    ...before("moi-lab2"), sourceStateToken: "invalid",
+  }).ready, false);
+});
+
 test("browser projections accept only exact write-free plan, execute and status contracts", () => {
   const target = "moi-lab2" as const;
   const spec = developmentPrivateWorkspaceImportTargetSpecs[target];
   const contentSetSha256 = "a".repeat(64);
   const planReceipt = "b".repeat(64);
-  assert.deepEqual(parseDevelopmentPrivateWorkspaceImportPlanAccess({
+  const targetState = {
     schemaVersion: 1,
     environment: "development",
     target,
-    phase: "plan-access",
+    phase: "target-state",
     ready: true,
-  }, target), { target, ready: true });
+    counts: {
+      creatorRows: 1, deletedCreatorRows: 1, creatorOwnerRows: 0,
+      gameRows: 2, deletedGameRows: 2, activeGameRows: 0,
+      releaseRows: 0, currentReleaseRows: 0,
+      workspaceRows: 0, workspaceGameRows: 0, workspaceFileRows: 0,
+    },
+    integrity: {
+      creatorIdentityPresent: true,
+      sourceStateTokenValid: true,
+      publicStateTokenValid: true,
+      unrelatedPrivateStateTokenValid: true,
+    },
+  } as const;
+  assert.deepEqual(parseDevelopmentPrivateWorkspaceImportPlanAccess(targetState, target), {
+    target, ready: true, counts: targetState.counts, integrity: targetState.integrity,
+  });
   assert.equal(parseDevelopmentPrivateWorkspaceImportPlanAccess({
-    schemaVersion: 1,
-    environment: "development",
-    target,
-    phase: "plan-access",
-    ready: true,
+    ...targetState,
     extra: true,
   }, target), null);
-  assert.equal(parseDevelopmentPrivateWorkspaceImportPlanAccess({
-    schemaVersion: 1,
-    environment: "development",
-    target,
-    phase: "plan-access",
-    ready: false,
-  }, target), null);
+  assert.equal(parseDevelopmentPrivateWorkspaceImportPlanAccess({ ...targetState, counts: {
+    ...targetState.counts, workspaceRows: -1,
+  } }, target), null);
+  assert.equal(parseDevelopmentPrivateWorkspaceImportPlanAccess({ ...targetState, ready: false }, target)?.ready, false);
   const plan = parseDevelopmentPrivateWorkspaceImportPlan({
     schemaVersion: 1,
     environment: "development",
@@ -740,6 +773,7 @@ test("source boundary is Development-only, MFA-gated, serializable and has no pu
   assert.match(targetPage, /planやimportは自動実行されません|DevelopmentPrivateWorkspaceImportPanel/);
   assert.match(adminPanel, />Private import<\/Link>/);
   assert.match(planRoute, /export async function GET[\s\S]*requireRecentSiteAdminMfa/);
-  assert.match(planRoute, /phase: "plan-access"/);
-  assert.match(planRoute, /ready: true/);
+  assert.match(planRoute, /method: "GET"/);
+  assert.match(panel, /Read-only target state/);
+  assert.match(panel, /bundleやplanは送信していません/);
 });

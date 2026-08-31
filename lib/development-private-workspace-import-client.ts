@@ -26,7 +26,26 @@ export type DevelopmentPrivateWorkspaceImportClientPlan = {
 
 export type DevelopmentPrivateWorkspaceImportPlanAccess = {
   target: DevelopmentPrivateWorkspaceImportTarget;
-  ready: true;
+  ready: boolean;
+  counts: {
+    creatorRows: number;
+    deletedCreatorRows: number;
+    creatorOwnerRows: number;
+    gameRows: number;
+    deletedGameRows: number;
+    activeGameRows: number;
+    releaseRows: number;
+    currentReleaseRows: number;
+    workspaceRows: number;
+    workspaceGameRows: number;
+    workspaceFileRows: number;
+  };
+  integrity: {
+    creatorIdentityPresent: boolean;
+    sourceStateTokenValid: boolean;
+    publicStateTokenValid: boolean;
+    unrelatedPrivateStateTokenValid: boolean;
+  };
 };
 
 export type DevelopmentPrivateWorkspaceImportAcceptance = {
@@ -145,16 +164,36 @@ export function parseDevelopmentPrivateWorkspaceImportPlanAccess(
   target: DevelopmentPrivateWorkspaceImportTarget,
 ): DevelopmentPrivateWorkspaceImportPlanAccess | null {
   const input = record(value);
+  const counts = record(input?.counts);
+  const integrity = record(input?.integrity);
+  const countKeys = [
+    "activeGameRows", "creatorOwnerRows", "creatorRows", "currentReleaseRows",
+    "deletedCreatorRows", "deletedGameRows", "gameRows", "releaseRows",
+    "workspaceFileRows", "workspaceGameRows", "workspaceRows",
+  ] as const;
   if (
     !input
-    || !exactKeys(input, ["environment", "phase", "ready", "schemaVersion", "target"])
+    || !counts
+    || !integrity
+    || !exactKeys(input, ["counts", "environment", "integrity", "phase", "ready", "schemaVersion", "target"])
+    || !exactKeys(counts, countKeys)
+    || !exactKeys(integrity, [
+      "creatorIdentityPresent", "publicStateTokenValid", "sourceStateTokenValid", "unrelatedPrivateStateTokenValid",
+    ])
     || input.schemaVersion !== 1
     || input.environment !== "development"
     || input.target !== target
-    || input.phase !== "plan-access"
-    || input.ready !== true
+    || input.phase !== "target-state"
+    || typeof input.ready !== "boolean"
+    || countKeys.some((key) => !Number.isSafeInteger(counts[key]) || Number(counts[key]) < 0)
+    || Object.values(integrity).some((entry) => typeof entry !== "boolean")
   ) return null;
-  return { target, ready: true };
+  return {
+    target,
+    ready: input.ready,
+    counts: counts as DevelopmentPrivateWorkspaceImportPlanAccess["counts"],
+    integrity: integrity as DevelopmentPrivateWorkspaceImportPlanAccess["integrity"],
+  };
 }
 
 export function parseDevelopmentPrivateWorkspaceImportPlan(
