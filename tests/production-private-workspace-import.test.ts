@@ -26,7 +26,10 @@ import {
 import { createStoredZip } from "../apps/sdk-portal/lib/stored-zip.ts";
 import {
   diagnoseProductionPrivateWorkspaceImportTargetState,
+  parseProductionPrivateWorkspaceImportTargetStateHttpFailure,
   parseProductionPrivateWorkspaceImportTargetState,
+  productionPrivateWorkspaceImportTargetStateSafeErrorStatuses,
+  requestProductionPrivateWorkspaceImportTargetState,
   verifyProductionPrivateWorkspaceImportFileAgainstSpec,
 } from "../lib/production-private-workspace-import-client.ts";
 import { productionPrivateWorkspaceImportPageMode } from "../lib/production-private-workspace-import-page-access.ts";
@@ -271,6 +274,144 @@ test("target-state diagnostics preserve the one read response and classify every
   assert.equal(parseProductionPrivateWorkspaceImportTargetState(malformed, "moi-lab2"), null);
 });
 
+async function targetStateResponseFixture(input: {
+  payload?: unknown;
+  status?: number;
+  jsonFailure?: boolean;
+  transportFailure?: boolean;
+}) {
+  let fetchCalls = 0;
+  let jsonReads = 0;
+  const status = input.status ?? 200;
+  const fetcher = (async (request: RequestInfo | URL, init?: RequestInit) => {
+    fetchCalls += 1;
+    assert.equal(String(request), "/api/admin/sdk-production-private-workspace-import/moi-lab2/target-state");
+    assert.deepEqual(init, { method: "GET", cache: "no-store" });
+    if (input.transportFailure) throw new Error("transport unavailable");
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => {
+        jsonReads += 1;
+        if (input.jsonFailure) throw new Error("non-json response");
+        return input.payload;
+      },
+    } as Response;
+  }) as typeof fetch;
+  const result = await requestProductionPrivateWorkspaceImportTargetState("moi-lab2", fetcher);
+  return { result, fetchCalls, jsonReads };
+}
+
+test("target-state response contract retains success, known errors, unknown responses, and transport failure", async () => {
+  const readyResponse = projectProductionPrivateWorkspaceImportTargetState("moi-lab2", before());
+  const success = await targetStateResponseFixture({ payload: readyResponse });
+  assert.equal(success.result.kind, "success");
+  assert.equal(success.result.kind === "success" && success.result.value.ready, true);
+  assert.deepEqual({ fetchCalls: success.fetchCalls, jsonReads: success.jsonReads }, {
+    fetchCalls: 1,
+    jsonReads: 1,
+  });
+
+  const known = await targetStateResponseFixture({
+    payload: { error: "PRODUCTION_PRIVATE_IMPORT_UNAVAILABLE" },
+    status: 503,
+  });
+  assert.deepEqual(known, {
+    result: {
+      kind: "http-error",
+      status: 503,
+      code: "PRODUCTION_PRIVATE_IMPORT_UNAVAILABLE",
+    },
+    fetchCalls: 1,
+    jsonReads: 1,
+  });
+
+  const unknown = await targetStateResponseFixture({
+    payload: { error: "database connection failed: secret detail" },
+    status: 503,
+  });
+  assert.deepEqual(unknown, {
+    result: { kind: "http-error", status: 503, code: "SAFE_ERROR_UNAVAILABLE" },
+    fetchCalls: 1,
+    jsonReads: 1,
+  });
+
+  const malformedSuccess = await targetStateResponseFixture({
+    payload: { schemaVersion: 1, secret: "must not escape" },
+    status: 200,
+  });
+  assert.deepEqual(malformedSuccess, {
+    result: {
+      kind: "contract-error",
+      status: 200,
+      code: "TARGET_STATE_RESPONSE_CONTRACT_INVALID",
+    },
+    fetchCalls: 1,
+    jsonReads: 1,
+  });
+
+  const unreadable = await targetStateResponseFixture({ status: 502, jsonFailure: true });
+  assert.deepEqual(unreadable, {
+    result: { kind: "http-error", status: 502, code: "SAFE_ERROR_UNAVAILABLE" },
+    fetchCalls: 1,
+    jsonReads: 1,
+  });
+
+  const transport = await targetStateResponseFixture({ transportFailure: true });
+  assert.deepEqual(transport, {
+    result: { kind: "transport-error", code: "TARGET_STATE_TRANSPORT_UNKNOWN" },
+    fetchCalls: 1,
+    jsonReads: 0,
+  });
+});
+
+test("target-state HTTP diagnostics retain only exact reachable safe status/code pairs", () => {
+  assert.deepEqual(productionPrivateWorkspaceImportTargetStateSafeErrorStatuses, {
+    ADMIN_AUTH_REQUIRED: 401,
+    ADMIN_FULL_AUTH_REQUIRED: 403,
+    ADMIN_STEP_UP_REQUIRED: 403,
+    SITE_ADMIN_PASSWORD_NOT_CONFIGURED: 503,
+    PRODUCTION_PRIVATE_IMPORT_INPUT_INVALID: 400,
+    PRODUCTION_PRIVATE_IMPORT_UNAVAILABLE: 503,
+    PRODUCTION_PRIVATE_IMPORT_TARGET_INVALID: 503,
+    SDK_ACCOUNT_LINK_SECRET_NOT_CONFIGURED: 503,
+    SDK_SERVICE_ENVIRONMENT_MISMATCH: 503,
+    SDK_SERVICE_AUTH_REQUIRED: 503,
+  });
+  assert.deepEqual(parseProductionPrivateWorkspaceImportTargetStateHttpFailure(
+    { error: "PRODUCTION_PRIVATE_IMPORT_UNAVAILABLE" },
+    503,
+  ), { status: 503, code: "PRODUCTION_PRIVATE_IMPORT_UNAVAILABLE" });
+  assert.deepEqual(parseProductionPrivateWorkspaceImportTargetStateHttpFailure(
+    { error: "ADMIN_FULL_AUTH_REQUIRED" },
+    403,
+  ), { status: 403, code: "ADMIN_FULL_AUTH_REQUIRED" });
+  assert.deepEqual(parseProductionPrivateWorkspaceImportTargetStateHttpFailure(
+    { error: "SDK_SERVICE_AUTH_REQUIRED" },
+    503,
+  ), { status: 503, code: "SDK_SERVICE_AUTH_REQUIRED" });
+  assert.equal(parseProductionPrivateWorkspaceImportTargetStateHttpFailure(
+    { error: "database connection failed: secret detail" },
+    503,
+  ), null);
+  assert.equal(parseProductionPrivateWorkspaceImportTargetStateHttpFailure(
+    { error: "PRODUCTION_PRIVATE_IMPORT_UNAVAILABLE", detail: "unexpected" },
+    503,
+  ), null);
+  assert.equal(parseProductionPrivateWorkspaceImportTargetStateHttpFailure(
+    { error: "PRODUCTION_PRIVATE_IMPORT_UNAVAILABLE" },
+    409,
+  ), null);
+  assert.equal(parseProductionPrivateWorkspaceImportTargetStateHttpFailure(
+    { error: "PRODUCTION_PRIVATE_IMPORT_OPERATION_CONFLICT" },
+    409,
+  ), null);
+  assert.equal(parseProductionPrivateWorkspaceImportTargetStateHttpFailure(
+    { error: "ADMIN_AUTH_REQUIRED" },
+    200,
+  ), null);
+});
+
 test("the Production operation ID is deterministic and never reuses consumed Development IDs", () => {
   const fixture = syntheticBundle();
   const bundle = validateProductionPrivateWorkspaceBundle({ target: "moi-lab2", archive: fixture.archive, specs: fixture.specs });
@@ -368,6 +509,7 @@ test("development exposes preparation only while canonical main exposes executio
 
 test("preparation UI has no upload POST controls and execution has single plan/execute/status paths", () => {
   const panel = readFileSync("app/site-admin/runtime-operations/production-private-workspace-import/moi-lab2/ProductionPrivateWorkspaceImportPanel.tsx", "utf8");
+  const client = readFileSync("lib/production-private-workspace-import-client.ts", "utf8");
   assert.match(panel, /mode === "preparation"/);
   assert.match(panel, /この画面にはupload、plan、execute controlがありません/);
   assert.match(panel, /planUsed\.current = true/);
@@ -376,5 +518,22 @@ test("preparation UI has no upload POST controls and execution has single plan/e
   assert.match(panel, /data-production-private-import-target-failures/);
   assert.match(panel, /setTargetState\(parsed\)/);
   assert.equal((panel.match(/method: "POST"/g) ?? []).length, 2);
-  assert.match(panel, /method: "GET"/);
+  assert.equal((panel.match(/body: verified\.file/g) ?? []).length, 2);
+  assert.match(panel, /requestProductionPrivateWorkspaceImportTargetState\("moi-lab2"\)/);
+  const targetRead = panel.slice(panel.indexOf("const checkTarget"), panel.indexOf("const requestPlan"));
+  assert.match(targetRead, /targetStateUsed\.current = true/);
+  assert.match(targetRead, /result\.kind === "transport-error"/);
+  assert.match(targetRead, /result\.kind === "http-error"/);
+  assert.match(targetRead, /result\.kind === "contract-error"/);
+  assert.match(targetRead, /HTTP \$\{result\.status\} \/ \$\{result\.code\}/);
+  assert.doesNotMatch(targetRead, /await payload\(response\)/);
+  const targetRequest = client.slice(
+    client.indexOf("export async function requestProductionPrivateWorkspaceImportTargetState"),
+    client.indexOf("export function parseProductionPrivateWorkspaceImportPlan"),
+  );
+  assert.equal((targetRequest.match(/fetcher\(/g) ?? []).length, 1);
+  assert.equal((targetRequest.match(/response\.json\(\)/g) ?? []).length, 1);
+  assert.match(targetRequest, /method: "GET", cache: "no-store"/);
+  assert.doesNotMatch(targetRequest, /method: "POST"/);
+  assert.doesNotMatch(targetRequest, /body:/);
 });
