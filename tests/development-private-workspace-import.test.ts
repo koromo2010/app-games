@@ -718,6 +718,7 @@ test("source boundary is Development-only, MFA-gated, serializable and has no pu
     "apps/sdk-portal/app/api/internal/recovery/development-private-workspace-import/[target]/execute/route.ts",
     "apps/sdk-portal/app/api/internal/recovery/development-private-workspace-import/[target]/status/[operationId]/route.ts",
     "app/api/admin/sdk-development-private-workspace-import/[target]/plan/route.ts",
+    "app/api/admin/sdk-development-private-workspace-import/[target]/target-state/route.ts",
     "app/api/admin/sdk-development-private-workspace-import/[target]/execute/route.ts",
     "app/api/admin/sdk-development-private-workspace-import/[target]/status/[operationId]/route.ts",
   ];
@@ -733,6 +734,10 @@ test("source boundary is Development-only, MFA-gated, serializable and has no pu
   const adminPanel = readFileSync("app/admin/SiteAdminPanel.tsx", "utf8");
   const planRoute = readFileSync(
     "app/api/admin/sdk-development-private-workspace-import/[target]/plan/route.ts",
+    "utf8",
+  );
+  const targetStateRoute = readFileSync(
+    "app/api/admin/sdk-development-private-workspace-import/[target]/target-state/route.ts",
     "utf8",
   );
   const store = readFileSync("apps/sdk-portal/lib/development-private-workspace-import-store.ts", "utf8");
@@ -774,6 +779,10 @@ test("source boundary is Development-only, MFA-gated, serializable and has no pu
   assert.match(adminPanel, />Private import<\/Link>/);
   assert.match(planRoute, /export async function GET[\s\S]*requireRecentSiteAdminMfa/);
   assert.match(planRoute, /method: "GET"/);
+  assert.match(targetStateRoute, /export async function GET[\s\S]*requireFullSiteAdminSession/);
+  assert.doesNotMatch(targetStateRoute, /requireRecentSiteAdminMfa/);
+  assert.match(targetStateRoute, /phase !== "target-state"/);
+  assert.match(panel, /\/target-state/);
   assert.match(panel, /Read-only target state/);
   assert.match(panel, /bundleやplanは送信していません/);
 });

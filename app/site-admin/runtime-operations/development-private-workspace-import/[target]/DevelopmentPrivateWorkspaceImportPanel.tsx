@@ -162,9 +162,9 @@ export function DevelopmentPrivateWorkspaceImportPanel({
     setTargetStateChecking(true);
     setTargetState(null);
     setMessage("");
-    const planPath = `/api/admin/sdk-development-private-workspace-import/${encodeURIComponent(target)}/plan`;
+    const targetStatePath = `/api/admin/sdk-development-private-workspace-import/${encodeURIComponent(target)}/target-state`;
     try {
-      const response = await fetch(planPath, { method: "GET", cache: "no-store" });
+      const response = await fetch(targetStatePath, { method: "GET", cache: "no-store" });
       const payload = await readPayload(response);
       const parsed = response.ok
         ? parseDevelopmentPrivateWorkspaceImportPlanAccess(payload, target)
