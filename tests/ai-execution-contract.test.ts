@@ -171,8 +171,16 @@ test("development gates follow external effects instead of feature names or gene
   assert.match(root, /旧task contract.*attempt上限.*carry-forwardしない/s);
   assert.match(root, /認証・権限・接続logicのsource実装.*standing authorizationに含む/s);
   assert.match(delivery, /認証・権限・接続logicのsource変更.*保護対象状態を実際に変更しない限りこのloopに含む/s);
-  assert.match(root, /disposable Development Roomの作成・通常操作・cleanup/);
-  assert.match(delivery, /disposable Development Room.*操作ごとの追加承認を作らない/s);
+  assert.match(root, /disposable Development Roomの作成・再作成・通常操作・退出・解散・削除・cleanup/);
+  assert.match(root, /disposable Development Room.*事前件数上限を設けず.*最終cleanupの確認を利用者へ求めない/s);
+  assert.match(delivery, /disposable Development Room.*事前件数上限を設けず.*追加承認や利用者確認を作らない/s);
+  assert.match(delivery, /旧task contract、Execution sheet、checkpoint.*一回限り、最大N件、再作成禁止.*carry-forwardしない/s);
+  assert.match(root, /debug mode、runner、operator、fixture.*反復的な利用者操作より先に使う/s);
+  assert.match(root, /debug機能の不足.*再利用可能なdebug基盤自体を改善する/s);
+  assert.match(delivery, /debug mode、runner、operator、fixture、seed、状態表示.*再ログイン、アカウント切替、一手ごとの入力より先に使う/s);
+  assert.match(delivery, /既存debug機能.*利用者へ手作業を転嫁する前にroot causeを特定.*共通debug機能.*改善してtestする/s);
+  assert.match(delivery, /debug機能.*正規command、validation、認証・認可、Room membership、server側状態遷移.*権限回避、production有効化で受入を偽装しない/s);
+  assert.match(delivery, /別TODO、別task contract、追加承認を作らない/);
   assert.match(delivery, /push後は更新対象remote ref.*自動Deployment.*場合だけ.*runtime health.*必要な場合だけ/s);
   assert.match(delivery, /docs・test・配備対象外path.*一律に要求しない/s);
   assert.match(records, /artifact作成者がattempt回数.*中間停止・再承認点を追加しない/s);

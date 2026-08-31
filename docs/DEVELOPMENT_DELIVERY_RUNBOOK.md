@@ -79,7 +79,7 @@ Git refを過去へforceで巻き戻すことは通常のrollbackとみなさな
 - main ref反映とProduction Deploymentは別の外部効果であり、それぞれを明示した承認がない限り一方から他方を推論しない。
 - push後は更新対象remote refをread-backする。対象変更により自動Deploymentが期待される、または実際に開始された場合だけ、関係するDeploymentのidentity、source SHA、statusを確認する。runtime healthはruntime surfaceを変更した場合、またはtaskの受入主張に必要な場合だけ確認し、docs・test・配備対象外pathや`IGNORED`だけの変更へ一律に要求しない。不一致は成功扱いせずforward fixまたはrollbackを判断する。
 
-通常のprototype／development taskでは、受入scenarioに必要なdisposable Development Roomの作成、通常操作、正規cleanupを正本のstanding authorization内の同じ検証単位として扱い、操作ごとの追加承認を作らない。task contractが明示的に除外するRoom、実利用者・再生成不能data・無関係な別Roomへ影響する操作、production Roomはこの既定に含めない。production Roomはenvironment、目的、対象を含む明示承認を必要とし、承認範囲に通常操作やcleanupを含むかをapproval requestで固定する。Room権限からDB／Redis管理write、credential・role／grant・環境binding変更、別environment操作を推論しない。
+通常のprototype／development taskでは、受入scenarioに必要なdisposable Development Roomの作成・再作成、通常操作、退出、解散、削除、正規cleanupを正本のstanding authorization内の同じ検証単位として扱う。authorization上の事前件数上限を設けず、作成・再作成・解散・削除・最終cleanupごとの追加承認や利用者確認を作らない。旧task contract、Execution sheet、checkpointに残る一回限り、最大N件、再作成禁止等は、利用者が現在のtaskで明示的に再指定していない限りcarry-forwardしない。task contractが明示的に除外するRoom、実利用者・再生成不能data・無関係な別Roomへ影響する操作、production Roomはこの既定に含めない。production Roomはenvironment、目的、対象を含む明示承認を必要とし、承認範囲に通常操作やcleanupを含むかをapproval requestで固定する。Room権限からDB／Redis管理write、credential・role／grant・環境binding変更、別environment操作を推論しない。
 
 cleanupまたはremaining read-backが失敗したら対象Roomとfailure classを記録して内部回復する。同じ障害で永続状態を無制限に増殖させる具体的危険がある場合だけ、そのRoom作成経路を止める。
 
@@ -89,6 +89,10 @@ cleanupまたはremaining read-backが失敗したら対象Roomとfailure class�
 - environment variableは値を表示・保存せず、存在、environment、供給元identity、選択優先順位だけを確認する。
 - runtime-selected resourceを診断する場合は診断対象との同一性を立証し、別resourceのSQLや画面を代用しない。
 - Preview、development、productionの証拠を混ぜず、取得経路、対象identity、取得時刻を記録する。
+
+Development runtimeでは、利用可能なdebug mode、runner、operator、fixture、seed、状態表示を最初にinventoryし、同じscenarioを表現できるものを反復的な再ログイン、アカウント切替、一手ごとの入力より先に使う。既存debug機能がscenarioを正しく表現できない場合は、利用者へ手作業を転嫁する前にroot causeを特定し、同じtask scopeで共通debug機能を再利用可能な形へ改善してtestする。この改善が正本のstanding authorization内なら、別TODO、別task contract、追加承認を作らない。
+
+debug機能は実際の正規command、validation、認証・認可、Room membership、server側状態遷移を通し、task固有IDや固定結果のhard-code、権限回避、production有効化で受入を偽装しない。見た目、利用者認証、実操作自体が成功条件である部分だけは正規surfaceでも最終確認し、debug結果をその直接証拠へ読み替えない。
 
 証拠は主張へ直接対応させる。`READY`は配備処理の状態であってruntime PASSではない。別commit、別environment、`SKIPPED`、`IGNORED`、`CANCELED`、identity不明の結果をPASSへ読み替えない。
 

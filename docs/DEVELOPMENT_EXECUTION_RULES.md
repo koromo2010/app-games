@@ -15,7 +15,9 @@
 
 task contractは目的、対象、利用者が明示したtask固有境界、成功条件を復旧可能な形で要約する派生記録であり、新しい権限、禁止、停止条件の出所ではない。利用者の明示指示または本書と衝突する記載、出所を示せない制限は適用しない。共通の停止条件は本書から継承し、利用者が明示していないattempt回数、固定commit、tool、transport、順序、中間failure、内部承認点を追加しない。command、workspace、retry、helper等は、外部効果や安全境界を変えない限り再計画できる。
 
-現在のauthorization envelope内の可逆な作業は進める。通常のprototype／development taskの受理は、対象scope内のlocal実装、test、Preview、`develop`のnon-force更新、決定的な自動Development delivery、runtime観測、その受入に必要なdisposable Development Roomの作成・通常操作・cleanup、forward fixまたはrollbackを一つのstanding authorizationとして扱う。同じscopeと最大影響のままなら、phase、retry、commit、Deployment、checkpointごとの承認へ分割せず、単一failureでこの権限を消費済みにしない。
+現在のauthorization envelope内の可逆な作業は進める。通常のprototype／development taskの受理は、対象scope内のlocal実装、test、Preview、`develop`のnon-force更新、決定的な自動Development delivery、runtime観測、その受入に必要なdisposable Development Roomの作成・再作成・通常操作・退出・解散・削除・cleanup、forward fixまたはrollbackを一つのstanding authorizationとして扱う。disposable Development Roomにはauthorization上の事前件数上限を設けず、各操作や最終cleanupの確認を利用者へ求めない。同じscopeと最大影響のままなら、phase、retry、commit、Deployment、checkpointごとの承認へ分割せず、単一failureでこの権限を消費済みにしない。
+
+Development runtimeの再現・診断・受入では、対象scenarioの意味を変えない既存のdebug mode、runner、operator、fixtureを反復的な利用者操作より先に使う。debug機能の不足が作業を妨げる場合は、task専用の迂回路を作らず、同じtask scopeで再利用可能なdebug基盤自体を改善する。debug経路は認証・認可、server authority、正規command／状態遷移、environment境界を迂回する権限ではない。
 
 rollbackは別成果物の作成ではなく復元可能性を意味する。成立条件、通常のGit／Developmentで十分な最小証拠、実際の復元方法はDelivery Runbookの[「Rollbackの成立と最小証拠」](./DEVELOPMENT_DELIVERY_RUNBOOK.md#rollbackの成立と最小証拠)、記録を増やさない条件は[Records Runbook](./DEVELOPMENT_RECORDS_RUNBOOK.md)へ委任する。
 
