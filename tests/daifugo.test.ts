@@ -13,6 +13,7 @@ import {
 } from "../lib/daifugo.ts";
 import { createStandardPlayingCardDeck, type PlayingCard } from "../lib/playing-cards.ts";
 import { expireDaifugoTurn } from "../lib/daifugo-room-domain.ts";
+import { AuthoritativeTimerNotExpiredError } from "../lib/game-timer/retry.ts";
 import { normalizeDaifugoRoom } from "../lib/daifugo-room-normalizer.ts";
 import { sanitizeDaifugoRoom, type DaifugoRoom } from "../lib/daifugo-room.ts";
 
@@ -86,7 +87,17 @@ test("保存されたオンライン部屋を検証して復元する", () => {
 test("場が空の手番が時間切れになると最弱の合法手を自動で出す", () => {
   const room = onlineRoom();
   const currentPlayerId = room.game!.currentPlayerId!;
-  const expired = expireDaifugoTurn(room, room.phaseStartedAt!, 31_001);
+  assert.throws(
+    () => expireDaifugoTurn(room, room.phaseStartedAt!, 30_999),
+    (error: unknown) => {
+      assert.ok(error instanceof AuthoritativeTimerNotExpiredError);
+      assert.equal(error.code, "DAIFUGO_TIMER_NOT_EXPIRED");
+      assert.equal(error.serverDeadlineAt, 31_000);
+      assert.equal(error.retryAfterMs, 1);
+      return true;
+    },
+  );
+  const expired = expireDaifugoTurn(room, room.phaseStartedAt!, 31_000);
   assert.equal(expired.game?.turnNumber, room.game!.turnNumber + 1);
   assert.equal(expired.game?.lastAction?.playerId, currentPlayerId);
   assert.equal(expired.game?.lastAction?.type, "play");

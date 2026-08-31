@@ -14,3 +14,14 @@ test("多数参加でも代行待機時間には上限を設ける", () => {
   const playerIds = ["host", ...Array.from({ length: 20 }, (_, index) => `p${index}`)];
   assert.equal(clientTimeoutClaimDelayMs({ hostId: "host", playerIds, playerId: "p19" }), 6_500);
 });
+
+test("現在timer ownerを先頭にしてhost以外もordered claimantになる", () => {
+  const options = {
+    ownerId: "p2",
+    playerIds: ["host", "p1", "p2", "p3"],
+  };
+  assert.equal(clientTimeoutClaimDelayMs({ ...options, playerId: "p2" }), 0);
+  assert.equal(clientTimeoutClaimDelayMs({ ...options, playerId: "host" }), 3_500);
+  assert.equal(clientTimeoutClaimDelayMs({ ...options, playerId: "p1" }), 4_250);
+  assert.equal(clientTimeoutClaimDelayMs({ ...options, playerId: "p3" }), 5_000);
+});

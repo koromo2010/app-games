@@ -3,18 +3,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { useAuthoritativeTimeoutFinalizer } from "@/app/hooks/use-authoritative-timeout-finalizer";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyDaifugoRoomAction, createDaifugoRoom, daifugoRoomApi } from "./daifugo-room-api-client";
 import { daifugoPlayError, sortDaifugoHand } from "@/lib/daifugo";
 import { type DaifugoRoomAction, type DaifugoRoomChoice, type DaifugoRoomPlayer, type DaifugoRoomView } from "@/lib/daifugo-room";
 import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
+import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
+import { authoritativeTimerErrorDirective } from "@/lib/game-timer/retry";
 import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 import { isPlayerAuthenticated, loadPersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
 import { daifugoText, localizeDaifugoPlayError, type DaifugoCopy } from "./daifugo-i18n";
 
 const lastRoomKey = "daifugo-last-room";
 const ownerIdKey = "daifugo-owner-id";
+const terminalTimerCodes = new Set([
+  "DAIFUGO_TIMER_EVENT_STALE",
+  "DAIFUGO_TIMER_DISABLED",
+]);
 function makeRoomCode() { return Math.random().toString(36).slice(2, 6).toUpperCase(); }
 function getOwnerId() { const saved = localStorage.getItem(ownerIdKey); if (saved) return saved; const value = crypto.randomUUID(); localStorage.setItem(ownerIdKey, value); return value; }
 function apiMessage(error: unknown, fallback: string, d: DaifugoCopy) {
@@ -83,12 +90,70 @@ export function useDaifugoController() {
   }, [d, room, saving]);
   useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: () => runAction({ type: "confirm-lobby-return", actorId: playerId }) });
 
-  useEffect(() => {
-    if (!roomCode || !playerId || roomPhase !== "playing" || !room?.phaseStartedAt || room.turnTimeLimitSeconds <= 0) return;
-    const startedAt = room.phaseStartedAt;
-    const timer = window.setTimeout(() => void applyDaifugoRoomAction(roomCode, { type: "expire-turn", actorId: playerId, phaseStartedAt: startedAt }).then((saved) => setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current)).catch(() => undefined), Math.max(0, startedAt + room.turnTimeLimitSeconds * 1000 - Date.now()) + 100);
-    return () => window.clearTimeout(timer);
-  }, [playerId, room?.phaseStartedAt, room?.turnTimeLimitSeconds, roomCode, roomPhase]);
+  const timerFinalizationPlan = useMemo(() => {
+    const startedAt = room?.phaseStartedAt;
+    if (
+      !roomCode
+      || !playerId
+      || roomPhase !== "playing"
+      || !startedAt
+      || room.turnTimeLimitSeconds <= 0
+    ) return null;
+    const claimantIds = room.players
+      .filter((player) => !player.isDummy)
+      .map((player) => player.id);
+    const ownerId = room.game?.currentPlayerId ?? room.hostId;
+    const generationKey = `${roomCode}:${startedAt}`;
+    return {
+      attemptKey: `timer:${generationKey}`,
+      generationKey,
+      serverDeadlineAt: startedAt + room.turnTimeLimitSeconds * 1_000,
+      claimantDelayMs: clientTimeoutClaimDelayMs({
+        playerId,
+        ownerId,
+        playerIds: claimantIds,
+      }),
+    };
+  }, [playerId, room, roomCode, roomPhase]);
+
+  const attemptTimerFinalization = useCallback(async () => {
+    const startedAt = room?.phaseStartedAt;
+    if (!roomCode || !playerId || !startedAt) return;
+    const saved = await applyDaifugoRoomAction(roomCode, {
+      type: "expire-turn",
+      actorId: playerId,
+      phaseStartedAt: startedAt,
+    });
+    setRoom((current) => current?.code === saved.code
+      ? preferLatestOnlineRoom(current, saved)
+      : current);
+  }, [playerId, room?.phaseStartedAt, roomCode]);
+
+  const reconcileTimerFinalization = useCallback(async (attemptKey: string) => {
+    if (!roomCode || !playerId) return "terminal" as const;
+    const expectedStartedAt = Number(attemptKey.split(":").at(-1));
+    const latest = await daifugoRoomApi.fetchRoom(roomCode, playerId);
+    if (!latest) return "terminal" as const;
+    setRoom((current) => current?.code === latest.code
+      ? preferLatestOnlineRoom(current, latest)
+      : current);
+    return latest.phase === "playing"
+      && latest.phaseStartedAt === expectedStartedAt
+      && latest.turnTimeLimitSeconds > 0
+      ? "active" as const
+      : "terminal" as const;
+  }, [playerId, roomCode]);
+
+  useAuthoritativeTimeoutFinalizer({
+    plan: timerFinalizationPlan,
+    attempt: attemptTimerFinalization,
+    reconcile: reconcileTimerFinalization,
+    classifyError: (caught) => authoritativeTimerErrorDirective(
+      caught,
+      terminalTimerCodes,
+    ),
+    onFailure: (caught) => setError(apiMessage(caught, d.actionFailed, d)),
+  });
 
   const createRoom = async () => {
     if (!session?.id || saving) return;

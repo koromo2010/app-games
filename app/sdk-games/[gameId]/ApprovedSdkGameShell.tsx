@@ -26,9 +26,13 @@ import {
   shouldKeepRoomResultAfterDissolve,
 } from "@/lib/room-result-return";
 import { useGameSdkActiveRoomRestore } from "@/app/hooks/use-game-sdk-active-room-restore";
+import { useAuthoritativeTimeoutFinalizer } from "@/app/hooks/use-authoritative-timeout-finalizer";
 import { AppLink as Link } from "@/app/components/AppLink";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommonRoomChatMount } from "@/app/components/room-chat/CommonRoomChatMount";
+import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
+import { authoritativeTimerErrorDirective } from "@/lib/game-timer/retry";
+import { observeServerDate, synchronizedNow } from "@/lib/server-clock";
 
 type WordWolfRoomView = GameSdkOnlineRoomView<
   {
@@ -60,6 +64,8 @@ const primaryClass =
   "rounded-xl bg-cyan-300 px-4 py-3 font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-45";
 const secondaryClass =
   "rounded-xl border border-slate-300 bg-white px-4 py-3 font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-45";
+const terminalTimerCodes = new Set(["TIMER_EVENT_STALE"]);
+const ambiguousTimerCodes = new Set(["STALE_REVISION"]);
 
 function randomRoomCode() {
   const values = new Uint32Array(1);
@@ -94,9 +100,9 @@ export function ApprovedSdkGameShell({
   >({
     gameId,
     endpoint: `/api/game-sdk/${gameId}/rooms`,
+    observeServerDate,
   }), [gameId]);
   const watchRef = useRef<{ close(): void } | null>(null);
-  const expiryRef = useRef<number | null>(null);
   const pendingActionRef = useRef(false);
   const pendingLobbyRoomRef = useRef<RoomSnapshot | null>(null);
   const roomRef = useRef<RoomSnapshot | null>(null);
@@ -213,7 +219,6 @@ export function ApprovedSdkGameShell({
   useEffect(() => {
     return () => {
       watchRef.current?.close();
-      if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
     };
   }, []);
 
@@ -269,7 +274,7 @@ export function ApprovedSdkGameShell({
     const deadlineAt = room?.view.common.timer?.deadlineAt;
     if (!deadlineAt || room?.phase === "result") return;
     const updateClock = () => {
-      setClockNow(Date.now());
+      setClockNow(synchronizedNow());
     };
     const initial = window.setTimeout(updateClock, 0);
     const interval = window.setInterval(updateClock, 1_000);
@@ -279,37 +284,72 @@ export function ApprovedSdkGameShell({
     };
   }, [room?.phase, room?.view.common.timer?.deadlineAt]);
 
-  useEffect(() => {
-    if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
-    expiryRef.current = null;
+  const timerFinalizationPlan = useMemo(() => {
     const timer = room?.view.common.timer;
-    if (!room || !timer?.deadlineAt || room.phase === "result") return;
-    const delay = Math.max(0, timer.deadlineAt + 1_500 - Date.now());
-    expiryRef.current = window.setTimeout(() => {
-      void runtime.sendCommand(room.code, {
-        expectedRevision: room.revision,
+    if (!room || !timer?.deadlineAt || room.phase === "result") return null;
+    const players = room.view.common.players;
+    const self = players.find((player) => player.isSelf && !player.isDummy);
+    if (!self) return null;
+    const claimantSeats = players
+      .filter((player) => player.connected && !player.isDummy)
+      .map((player) => String(player.seat));
+    const ownerSeat = timer.ownerSeat
+      ?? players.find((player) => player.isHost)?.seat
+      ?? claimantSeats[0]
+      ?? self.seat;
+    const generationKey = `${room.code}:${timer.turnSequence}`;
+    return {
+      attemptKey: `timer:${generationKey}`,
+      generationKey,
+      serverDeadlineAt: timer.deadlineAt + timer.graceMs,
+      claimantDelayMs: clientTimeoutClaimDelayMs({
+        playerId: String(self.seat),
+        ownerId: String(ownerSeat),
+        playerIds: claimantSeats,
+      }),
+    };
+  }, [room]);
+
+  const attemptTimerFinalization = useCallback(async (attemptKey: string) => {
+    const current = roomRef.current;
+    const timer = current?.view.common.timer;
+    if (!current || !timer || current.phase === "result") return;
+    const result = await runtime.sendCommand(current.code, {
+        expectedRevision: current.revision,
+        commandId: attemptKey,
         command: {
           type: "room/expire-timer",
           turnSequence: timer.turnSequence,
         },
-      }).then((result) => {
-        acceptIncomingRoom(result.room);
-      }).catch((error) => {
-        if (
-          error instanceof GameSdkHttpClientRuntimeError
-          && (
-            error.code === "STALE_REVISION"
-            || error.code === "TIMER_EVENT_STALE"
-            || error.code === "TIMER_NOT_EXPIRED"
-          )
-        ) return;
-        setMessage(runtimeErrorMessage(error));
       });
-    }, delay);
-    return () => {
-      if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
-    };
-  }, [acceptIncomingRoom, room, runtime]);
+    acceptIncomingRoom(result.room);
+  }, [acceptIncomingRoom, runtime]);
+
+  const reconcileTimerFinalization = useCallback(async (attemptKey: string) => {
+    const current = roomRef.current;
+    if (!current) return "terminal" as const;
+    const expectedSequence = Number(attemptKey.split(":").at(-1));
+    const latest = await runtime.readRoom(current.code);
+    if (!latest) return "terminal" as const;
+    acceptIncomingRoom(latest);
+    return latest.phase !== "result"
+      && latest.view.common.timer?.turnSequence === expectedSequence
+      && latest.view.common.timer.deadlineAt !== null
+      ? "active" as const
+      : "terminal" as const;
+  }, [acceptIncomingRoom, runtime]);
+
+  useAuthoritativeTimeoutFinalizer({
+    plan: timerFinalizationPlan,
+    attempt: attemptTimerFinalization,
+    reconcile: reconcileTimerFinalization,
+    classifyError: (error) => authoritativeTimerErrorDirective(
+      error,
+      terminalTimerCodes,
+      ambiguousTimerCodes,
+    ),
+    onFailure: (error) => setMessage(runtimeErrorMessage(error)),
+  });
 
   const returnToRoom = useCallback(async () => {
     const pendingLobbyRoom = pendingLobbyRoomRef.current;

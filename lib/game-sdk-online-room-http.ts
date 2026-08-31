@@ -7,6 +7,7 @@ import { GameFieldsPlatformRuntimeError } from "@game-fields/game-runtime";
 import type { AuthenticatedGameSdkPlatformAdapter } from "./game-sdk-platform-adapter.ts";
 import { GameSdkLlmRateLimitError } from "./game-sdk-llm-gateway.ts";
 import type { GameSdkCommandTimingCollector } from "./game-sdk-command-timing.ts";
+import { authoritativeTimerRejectionFrom } from "./game-timer/retry.ts";
 
 export type GameSdkOnlineRoomHttpOperation =
   | "read"
@@ -82,6 +83,8 @@ const conflictCodes = new Set([
   "ROOM_NOT_JOINABLE",
   "SETTINGS_LOCKED",
   "STALE_REVISION",
+  "TIMER_EVENT_STALE",
+  "TIMER_NOT_EXPIRED",
   "VOTE_ALREADY_SUBMITTED",
 ]);
 
@@ -133,6 +136,26 @@ function safeModuleErrorCode(error: unknown) {
 }
 
 export function gameSdkOnlineRoomErrorResponse(error: unknown) {
+  const timerRejection = authoritativeTimerRejectionFrom(error);
+  if (timerRejection) {
+    return Response.json(
+      {
+        error: timerRejection.code,
+        errorCode: timerRejection.code,
+        retryAfterMs: timerRejection.retryAfterMs,
+        serverDeadlineAt: timerRejection.serverDeadlineAt,
+      },
+      {
+        status: 409,
+        headers: {
+          "Cache-Control": "no-store",
+          "Retry-After": String(
+            Math.max(1, Math.ceil(timerRejection.retryAfterMs / 1_000)),
+          ),
+        },
+      },
+    );
+  }
   if (error instanceof GameFieldsPlatformRuntimeError) {
     return json({ error: error.code }, error.status);
   }

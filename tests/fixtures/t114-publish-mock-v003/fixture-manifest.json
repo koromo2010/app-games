@@ -16,7 +16,7 @@
   "sourceFileCount": 6,
   "sourceTotalUtf8Bytes": 16844,
   "sharedGameSourceSha256": "0e18d89ca2888764741b71682f7a198b58ca4cdd8fabb34de6e0a77a82be8fe0",
-  "manifestIdentitySha256": "ff026e555123cc3558bb11075ed2ab5207f87d1d07c265824c48b0b0b2b9a814",
+  "manifestIdentitySha256": "a2239e86adffd3a55cba7fa805f1c853f227524608353909d0a088cd37525d06",
   "expectedBuildArtifacts": [
     "game-fields-package.json",
     "index.html",

@@ -159,10 +159,13 @@ const appSet = defineGameSdkOnlineRoomAppSet({
 });
 ```
 
-閲覧者別RoomViewでは`room.view.common.timer`から`durationSeconds`、`startedAt`、`deadlineAt`、`turnSequence`を読めます。表示はゲーム画面内の任意位置へ置けますが、ブラウザからtimer時刻を送ってサーバー正本を上書きしてはいけません。
+閲覧者別RoomViewでは`room.view.common.timer`から`durationSeconds`、`startedAt`、`deadlineAt`、`graceMs`、`turnSequence`を読めます。表示はゲーム画面内の任意位置へ置けますが、ブラウザからtimer時刻を送ってサーバー正本を上書きしてはいけません。
 
 正式RoomではShellが`room/expire-timer`を要求し、Runtimeがサーバー時刻、
-turn sequence、graceを再検証してから`expireAppTurn`を実行します。2回連続
+turn sequence、graceを再検証してから`expireAppTurn`を実行します。早すぎる
+要求はserver deadlineとbounded `retryAfterMs`を返し、Shellは同じtimer generationを
+再armします。timer ownerから順にclientがclaimするため、先行clientの切断やbackground
+throttling後も一つのactive clientだけで確定できます。2回連続
 時間切れの本人だけ5秒制限となり、本人の`room/recover-timeout`で復帰します。
 
 ## Word DB resource

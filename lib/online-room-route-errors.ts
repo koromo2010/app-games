@@ -1,6 +1,7 @@
 import { isPlayerAuthConfigurationError } from "./player-auth.ts";
 import { isRedisStoreUnavailableError } from "./redis-store.ts";
 import type { OnlineRoomRouteOperation } from "./online-room-route-factory.ts";
+import { authoritativeTimerRejectionFrom } from "./game-timer/retry.ts";
 
 export type OnlineRoomErrorDefinition = {
   error: string;
@@ -19,6 +20,21 @@ type OnlineRoomErrorResponderConfig = {
 };
 
 export function commonOnlineRoomErrorResponse(error: unknown) {
+  const timerRejection = authoritativeTimerRejectionFrom(error);
+  if (timerRejection) return Response.json({
+    error: timerRejection.code,
+    errorCode: timerRejection.code,
+    retryAfterMs: timerRejection.retryAfterMs,
+    serverDeadlineAt: timerRejection.serverDeadlineAt,
+  }, {
+    status: 409,
+    headers: {
+      "Cache-Control": "no-store",
+      "Retry-After": String(
+        Math.max(1, Math.ceil(timerRejection.retryAfterMs / 1_000)),
+      ),
+    },
+  });
   const message = error instanceof Error ? error.message : "";
   if (message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
   if (message === "DEBUG_ACCESS_REQUIRED") return Response.json({ error: "Debug access required" }, { status: 403 });

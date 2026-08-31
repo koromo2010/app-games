@@ -1,6 +1,7 @@
 import { canPassDaifugoTurn, chooseDaifugoCpuPlay, createDaifugoGameForPlayers, passDaifugoTurn, playDaifugoCards } from "./daifugo.ts";
 import { normalizeCommonTimeLimit } from "./game-room-config.ts";
 import { daifugoMaximumPlayers, daifugoMinimumPlayers, type DaifugoRoom } from "./daifugo-room.ts";
+import { AuthoritativeTimerNotExpiredError } from "./game-timer/retry.ts";
 
 export function normalizeDaifugoCapacity(value: unknown) {
   const parsed = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 4;
@@ -56,8 +57,20 @@ export function passDaifugoRoomTurn(room: DaifugoRoom, playerId: string, now = D
 }
 
 export function expireDaifugoTurn(room: DaifugoRoom, phaseStartedAt: number, now = Date.now()) {
-  if (room.phase !== "playing" || !room.game || room.phaseStartedAt !== phaseStartedAt || room.turnTimeLimitSeconds === 0
-    || now < phaseStartedAt + room.turnTimeLimitSeconds * 1000) throw new Error("DAIFUGO_ROOM_CONFLICT");
+  if (room.phase !== "playing" || !room.game || room.phaseStartedAt !== phaseStartedAt) {
+    throw new Error("DAIFUGO_TIMER_EVENT_STALE");
+  }
+  if (room.turnTimeLimitSeconds === 0) {
+    throw new Error("DAIFUGO_TIMER_DISABLED");
+  }
+  const serverDeadlineAt = phaseStartedAt + room.turnTimeLimitSeconds * 1_000;
+  if (now < serverDeadlineAt) {
+    throw new AuthoritativeTimerNotExpiredError(
+      "DAIFUGO_TIMER_NOT_EXPIRED",
+      serverDeadlineAt,
+      now,
+    );
+  }
   const playerId = room.game.currentPlayerId;
   if (!playerId) throw new Error("DAIFUGO_ROOM_CONFLICT");
   if (room.game.table) return passDaifugoRoomTurn(room, playerId, now);

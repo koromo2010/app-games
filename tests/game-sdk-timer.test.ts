@@ -9,6 +9,7 @@ import { createGameSdkMockRuntime } from "@game-fields/game-sdk/mock-runtime";
 import {
   createGameSdkOnlineRoomModule,
   defineGameSdkOnlineRoomAppSet,
+  GameSdkTimerNotExpiredError,
 } from "@game-fields/game-sdk/runtime";
 
 const host: GameSdkTrustedActor = {
@@ -124,6 +125,7 @@ test("SDK basic timer resets only after an accepted turn Command", async () => {
     startedAt: null,
     deadlineAt: null,
     turnSequence: 0,
+    graceMs: 1_500,
   });
 
   const joined = await runtime.sendCommand({
@@ -148,6 +150,7 @@ test("SDK basic timer resets only after an accepted turn Command", async () => {
     startedAt: 2_000,
     deadlineAt: 32_000,
     turnSequence: 1,
+    graceMs: 1_500,
     ownerSeat: 0,
   });
 
@@ -183,6 +186,7 @@ test("SDK basic timer resets only after an accepted turn Command", async () => {
     startedAt: 10_000,
     deadlineAt: 40_000,
     turnSequence: 2,
+    graceMs: 1_500,
     ownerSeat: 0,
   });
 
@@ -200,6 +204,7 @@ test("SDK basic timer resets only after an accepted turn Command", async () => {
     startedAt: null,
     deadlineAt: null,
     turnSequence: 2,
+    graceMs: 1_500,
   });
   await assert.rejects(
     runtime.sendCommand({
@@ -338,7 +343,12 @@ test("SDK timer expires on the server, applies grace and requires explicit recov
       command: { type: "room/expire-timer", turnSequence: 1 },
     },
     actor: player,
-  }), /TIMER_NOT_EXPIRED/);
+  }), (error: unknown) => {
+    assert.ok(error instanceof GameSdkTimerNotExpiredError);
+    assert.equal(error.serverDeadlineAt, 33_500);
+    assert.equal(error.retryAfterMs, 1);
+    return true;
+  });
 
   now = 33_500;
   const firstTimeout = await runtime.sendCommand({

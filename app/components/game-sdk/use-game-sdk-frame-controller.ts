@@ -18,8 +18,12 @@ import {
   GameSdkHttpClientRuntimeError,
 } from "@game-fields/game-sdk/client-runtime";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
+import { useAuthoritativeTimeoutFinalizer } from "@/app/hooks/use-authoritative-timeout-finalizer";
 import { useSdkPreviewSessionRequired } from "@/app/sdk-preview/SdkPreviewSessionGate";
+import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
+import { authoritativeTimerErrorDirective } from "@/lib/game-timer/retry";
 import { clearPlayerSession } from "@/lib/player-session";
+import { observeServerDate } from "@/lib/server-clock";
 import { gameSdkDebugAutoFollowTarget } from "@/lib/game-sdk-debug-control-target";
 import {
   gameSdkPackageRevisionHref,
@@ -42,6 +46,9 @@ import type {
   SafeCommand,
 } from "./game-sdk-frame-types";
 import type { GameSdkFrameViewProps } from "./GameSdkFrameView";
+
+const terminalTimerCodes = new Set(["TIMER_EVENT_STALE"]);
+const ambiguousTimerCodes = new Set(["STALE_REVISION"]);
 
 export function useGameSdkFrameController(
   props: GameSdkFrameProps,
@@ -76,12 +83,12 @@ export function useGameSdkFrameController(
   >({
     gameId: runtimeId,
     endpoint,
+    observeServerDate,
   }), [endpoint, runtimeId]);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const roomRef = useRef<PackageRoom | null>(null);
   const pendingActionRef = useRef(false);
-  const expiryRef = useRef<number | null>(null);
   const lastAutoFollowOwnerSeatRef = useRef<number | null | undefined>(undefined);
 
   const [joinCode, setJoinCode] = useState("");
@@ -242,26 +249,72 @@ export function useGameSdkFrameController(
     selectDebugTarget(target, "auto-follow");
   }, [debugAutoFollow, debugOwnerSeat, selectDebugTarget]);
 
-  useEffect(() => {
-    if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
-    expiryRef.current = null;
+  const timerFinalizationPlan = useMemo(() => {
     const timer = room?.view.common.timer;
     if (
       !moduleRequired("timer")
       || !room
       || room.phase === "result"
       || !timer?.deadlineAt
-    ) return;
-    expiryRef.current = window.setTimeout(() => {
-      void commandRunner.send({
+    ) return null;
+    const players = room.view.common.players;
+    const self = players.find((player) => player.isSelf && !player.isDummy);
+    if (!self) return null;
+    const claimantSeats = players
+      .filter((player) => player.connected && !player.isDummy)
+      .map((player) => String(player.seat));
+    const ownerSeat = timer.ownerSeat
+      ?? players.find((player) => player.isHost)?.seat
+      ?? claimantSeats[0]
+      ?? self.seat;
+    const generationKey = `${room.code}:${timer.turnSequence}`;
+    return {
+      attemptKey: `timer:${generationKey}`,
+      generationKey,
+      serverDeadlineAt: timer.deadlineAt + timer.graceMs,
+      claimantDelayMs: clientTimeoutClaimDelayMs({
+        playerId: String(self.seat),
+        ownerId: String(ownerSeat),
+        playerIds: claimantSeats,
+      }),
+    };
+  }, [moduleRequired, room]);
+
+  const attemptTimerFinalization = useCallback(async (attemptKey: string) => {
+    const current = roomRef.current;
+    const timer = current?.view.common.timer;
+    if (!current || !timer || current.phase === "result") return;
+    const saved = await commandRunner.send({
         type: "room/expire-timer",
         turnSequence: timer.turnSequence,
-      }).then(lifecycle.attachLatestRoom).catch(() => undefined);
-    }, Math.max(0, timer.deadlineAt + 1_500 - Date.now()));
-    return () => {
-      if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
-    };
-  }, [commandRunner, lifecycle.attachLatestRoom, moduleRequired, room]);
+      }, { commandId: attemptKey });
+    lifecycle.attachLatestRoom(saved);
+  }, [commandRunner, lifecycle]);
+
+  const reconcileTimerFinalization = useCallback(async (attemptKey: string) => {
+    const current = roomRef.current;
+    if (!current) return "terminal" as const;
+    const expectedSequence = Number(attemptKey.split(":").at(-1));
+    const latest = await runtime.readRoom(current.code);
+    if (!latest || !lifecycle.attachRoom(latest)) return "terminal" as const;
+    return latest.phase !== "result"
+      && latest.view.common.timer?.turnSequence === expectedSequence
+      && latest.view.common.timer.deadlineAt !== null
+      ? "active" as const
+      : "terminal" as const;
+  }, [lifecycle, runtime]);
+
+  useAuthoritativeTimeoutFinalizer({
+    plan: timerFinalizationPlan,
+    attempt: attemptTimerFinalization,
+    reconcile: reconcileTimerFinalization,
+    classifyError: (error) => authoritativeTimerErrorDirective(
+      error,
+      terminalTimerCodes,
+      ambiguousTimerCodes,
+    ),
+    onFailure: handleRuntimeError,
+  });
 
   const joinRoomByCode = useCallback((code: string) => commandRunner.run(async () => {
     const target = await runtime.readRoom(code);
