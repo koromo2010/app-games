@@ -20,6 +20,7 @@ import { createStoredZip } from "../apps/sdk-portal/lib/stored-zip.ts";
 import {
   parseDevelopmentPrivateWorkspaceImportExecute,
   parseDevelopmentPrivateWorkspaceImportPlan,
+  parseDevelopmentPrivateWorkspaceImportPlanAccess,
   parseDevelopmentPrivateWorkspaceImportStatus,
 } from "../lib/development-private-workspace-import-client.ts";
 import { requireDevelopmentPrivateWorkspaceImportPageAccess } from "../lib/development-private-workspace-import-page-access.ts";
@@ -493,6 +494,28 @@ test("browser projections accept only exact write-free plan, execute and status 
   const spec = developmentPrivateWorkspaceImportTargetSpecs[target];
   const contentSetSha256 = "a".repeat(64);
   const planReceipt = "b".repeat(64);
+  assert.deepEqual(parseDevelopmentPrivateWorkspaceImportPlanAccess({
+    schemaVersion: 1,
+    environment: "development",
+    target,
+    phase: "plan-access",
+    ready: true,
+  }, target), { target, ready: true });
+  assert.equal(parseDevelopmentPrivateWorkspaceImportPlanAccess({
+    schemaVersion: 1,
+    environment: "development",
+    target,
+    phase: "plan-access",
+    ready: true,
+    extra: true,
+  }, target), null);
+  assert.equal(parseDevelopmentPrivateWorkspaceImportPlanAccess({
+    schemaVersion: 1,
+    environment: "development",
+    target,
+    phase: "plan-access",
+    ready: false,
+  }, target), null);
   const plan = parseDevelopmentPrivateWorkspaceImportPlan({
     schemaVersion: 1,
     environment: "development",
@@ -675,6 +698,10 @@ test("source boundary is Development-only, MFA-gated, serializable and has no pu
     "utf8",
   );
   const adminPanel = readFileSync("app/admin/SiteAdminPanel.tsx", "utf8");
+  const planRoute = readFileSync(
+    "app/api/admin/sdk-development-private-workspace-import/[target]/plan/route.ts",
+    "utf8",
+  );
   const store = readFileSync("apps/sdk-portal/lib/development-private-workspace-import-store.ts", "utf8");
   const migration = readFileSync("db/sdk/011_development_private_workspace_import.sql", "utf8");
   assert.match(source, /expectedEnvironment: "development"/);
@@ -697,6 +724,13 @@ test("source boundary is Development-only, MFA-gated, serializable and has no pu
   assert.match(store, /file_rows\.exact_file_rows = o\.runtime_file_count/);
   assert.match(panel, /crypto\.subtle|verifyDevelopmentPrivateWorkspaceImportFile/);
   assert.match(panel, /planUsed\.current = true/);
+  assert.match(panel, /parseDevelopmentPrivateWorkspaceImportPlanAccess/);
+  assert.match(panel, /setRuntimeStepUpRequired\(true\)/);
+  assert.ok(
+    panel.indexOf("parseDevelopmentPrivateWorkspaceImportPlanAccess")
+      < panel.indexOf("planUsed.current = true"),
+  );
+  assert.match(panel, /planは送信していません/);
   assert.match(panel, /executeUsed\.current = true/);
   assert.match(panel, /method: "GET"/);
   assert.match(panel, /execute POSTは再送しません/);
@@ -705,4 +739,7 @@ test("source boundary is Development-only, MFA-gated, serializable and has no pu
   assert.match(targetPage, /requireDevelopmentPrivateWorkspaceImportPageAccess/);
   assert.match(targetPage, /planやimportは自動実行されません|DevelopmentPrivateWorkspaceImportPanel/);
   assert.match(adminPanel, />Private import<\/Link>/);
+  assert.match(planRoute, /export async function GET[\s\S]*requireRecentSiteAdminMfa/);
+  assert.match(planRoute, /phase: "plan-access"/);
+  assert.match(planRoute, /ready: true/);
 });

@@ -13,6 +13,37 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 const headers = { "Cache-Control": "private, no-store" };
 
+export async function GET(request: Request, context: { params: Promise<{ target: string }> }) {
+  try {
+    await requireRecentSiteAdminMfa();
+    const { target } = await context.params;
+    if (
+      sdkSupportEnvironment() !== "development"
+      || !isCanonicalDevelopmentPlatformRuntime({
+        semanticEnvironment: process.env.APP_ENV,
+        vercelEnvironment: process.env.VERCEL_ENV,
+        project: process.env.VERCEL_PROJECT_NAME,
+        ref: process.env.VERCEL_GIT_COMMIT_REF,
+      })
+      || !isDevelopmentPrivateWorkspaceImportTarget(target)
+      || new URL(request.url).search !== ""
+    ) {
+      return Response.json({ error: "DEVELOPMENT_PRIVATE_IMPORT_INPUT_INVALID" }, { status: 400, headers });
+    }
+    return Response.json({
+      schemaVersion: 1,
+      environment: "development",
+      target,
+      phase: "plan-access",
+      ready: true,
+    }, { headers });
+  } catch (error) {
+    return siteAdminAuthorizationError(error) ?? Response.json({
+      error: error instanceof Error ? error.message : "DEVELOPMENT_PRIVATE_IMPORT_UNAVAILABLE",
+    }, { status: developmentPrivateWorkspaceImportErrorStatus(error), headers });
+  }
+}
+
 export async function POST(request: Request, context: { params: Promise<{ target: string }> }) {
   try {
     await requireRecentSiteAdminMfa();

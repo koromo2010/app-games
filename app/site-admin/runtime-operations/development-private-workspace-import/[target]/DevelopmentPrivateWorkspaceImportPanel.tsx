@@ -9,6 +9,7 @@ import {
 import {
   parseDevelopmentPrivateWorkspaceImportExecute,
   parseDevelopmentPrivateWorkspaceImportPlan,
+  parseDevelopmentPrivateWorkspaceImportPlanAccess,
   parseDevelopmentPrivateWorkspaceImportStatus,
   verifyDevelopmentPrivateWorkspaceImportFile,
   type DevelopmentPrivateWorkspaceImportAcceptance,
@@ -96,6 +97,7 @@ export function DevelopmentPrivateWorkspaceImportPanel({
   const [totpCode, setTotpCode] = useState("");
   const [stepUpSubmitting, setStepUpSubmitting] = useState(false);
   const [stepUpFailure, setStepUpFailure] = useState<SdkMigration011StepUpFailureCode | null>(null);
+  const [runtimeStepUpRequired, setRuntimeStepUpRequired] = useState(false);
   const [awaitingServerReevaluation, setAwaitingServerReevaluation] = useState(false);
   const [operationState, setOperationState] = useState<OperationState>("idle");
   const [verified, setVerified] = useState<VerifiedDevelopmentPrivateWorkspaceImportFile | null>(null);
@@ -120,6 +122,7 @@ export function DevelopmentPrivateWorkspaceImportPanel({
       setStepUpFailure(result.code);
       return;
     }
+    setRuntimeStepUpRequired(false);
     setAwaitingServerReevaluation(true);
     router.refresh();
   };
@@ -151,13 +154,40 @@ export function DevelopmentPrivateWorkspaceImportPanel({
 
   const requestPlan = async () => {
     if (!verified || planUsed.current || executeUsed.current) return;
-    planUsed.current = true;
-    setPlanLocked(true);
     setOperationState("planning");
     setMessage("");
+    const planPath = `/api/admin/sdk-development-private-workspace-import/${encodeURIComponent(target)}/plan`;
+    let accessResponse: Response;
+    let accessPayload: object | null;
+    try {
+      accessResponse = await fetch(planPath, { method: "GET", cache: "no-store" });
+      accessPayload = await readPayload(accessResponse);
+    } catch {
+      setOperationState("stopped");
+      setMessage("plan送信前のread-only認証確認結果が不明です。planは送信していません。");
+      return;
+    }
+    const accessError = accessPayload
+      ? (accessPayload as Record<string, unknown>).error
+      : null;
+    if (accessResponse.status === 403 && accessError === "ADMIN_STEP_UP_REQUIRED") {
+      setRuntimeStepUpRequired(true);
+      setOperationState("verified");
+      return;
+    }
+    const access = accessResponse.ok
+      ? parseDevelopmentPrivateWorkspaceImportPlanAccess(accessPayload, target)
+      : null;
+    if (!access) {
+      setOperationState("stopped");
+      setMessage("plan送信前の認証状態を安全に確認できません。planは送信していません。");
+      return;
+    }
+    planUsed.current = true;
+    setPlanLocked(true);
     try {
       const response = await fetch(
-        `/api/admin/sdk-development-private-workspace-import/${encodeURIComponent(target)}/plan`,
+        planPath,
         {
           method: "POST",
           headers: { "Content-Type": "application/zip" },
@@ -256,14 +286,14 @@ export function DevelopmentPrivateWorkspaceImportPanel({
     await reconcileStatus(verified, plan);
   };
 
-  if (initialAccess === "step-up-required") return (
+  if (initialAccess === "step-up-required" || runtimeStepUpRequired) return (
     <section className="rounded-2xl border border-cyan-300/25 bg-cyan-300/10 p-5">
       <h2 className="text-lg font-black text-cyan-100">Authenticator確認</h2>
       <p className="mt-2 text-sm leading-6 text-slate-200">
         full Site Adminセッションは有効です。private workspace importの前に、登録済みAuthenticatorの6桁コードでrecent MFAを更新してください。
       </p>
       <p className="mt-2 text-xs leading-5 text-slate-400">
-        成功後はこの画面をサーバーで再評価します。planやimportは自動実行されません。
+        成功後はこの画面をサーバーで再評価します。選択済みbundleとoperation IDを保持し、planやimportは自動実行されません。
       </p>
       <form className="mt-5 space-y-3" onSubmit={submitStepUp}>
         <label htmlFor="private-workspace-import-totp" className="block text-sm font-bold text-cyan-50">Authenticatorの6桁コード</label>
@@ -329,7 +359,7 @@ export function DevelopmentPrivateWorkspaceImportPanel({
         <button
           type="button"
           onClick={() => void requestPlan()}
-          disabled={!verified || planLocked || operationState === "verifying"}
+          disabled={!verified || planLocked || operationState === "verifying" || operationState === "stopped"}
           className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {operationState === "planning" ? "plan確認中…" : planLocked ? "plan送信済み" : "write-free planを確認"}

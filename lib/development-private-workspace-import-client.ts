@@ -24,6 +24,11 @@ export type DevelopmentPrivateWorkspaceImportClientPlan = {
   contentSetSha256: string;
 };
 
+export type DevelopmentPrivateWorkspaceImportPlanAccess = {
+  target: DevelopmentPrivateWorkspaceImportTarget;
+  ready: true;
+};
+
 export type DevelopmentPrivateWorkspaceImportAcceptance = {
   workspaceId: string;
   workspaceRows: 1;
@@ -133,6 +138,23 @@ export async function verifyDevelopmentPrivateWorkspaceImportFile(
   } catch {
     return { kind: "rejected", code: "BROWSER_CRYPTO_UNAVAILABLE" };
   }
+}
+
+export function parseDevelopmentPrivateWorkspaceImportPlanAccess(
+  value: unknown,
+  target: DevelopmentPrivateWorkspaceImportTarget,
+): DevelopmentPrivateWorkspaceImportPlanAccess | null {
+  const input = record(value);
+  if (
+    !input
+    || !exactKeys(input, ["environment", "phase", "ready", "schemaVersion", "target"])
+    || input.schemaVersion !== 1
+    || input.environment !== "development"
+    || input.target !== target
+    || input.phase !== "plan-access"
+    || input.ready !== true
+  ) return null;
+  return { target, ready: true };
 }
 
 export function parseDevelopmentPrivateWorkspaceImportPlan(
