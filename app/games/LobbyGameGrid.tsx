@@ -16,6 +16,7 @@ import type { GameOperation } from "@/lib/game-operations";
 import { gameOperationFor } from "@/lib/game-operations";
 import type { LocalizedGameCatalogEntry } from "./game-catalog";
 import { gamePlayHref } from "@/lib/game-routes";
+import { gameSdkManifestSupportsCrossLocaleRooms } from "@game-fields/game-sdk";
 import {
   parseFavoriteGameIds,
   readFavoriteGameIds,
@@ -132,9 +133,10 @@ function LobbyGameCard({ game, operation, activeRoom, locale, favorite, onToggle
   const maintenance = operation.maintenance;
   const active = Boolean(activeRoom);
   const privateGame = operation.publication === "private";
+  const crossLocale = gameSdkManifestSupportsCrossLocaleRooms({ localePolicy: game.localePolicy });
   const card = <article className={`group h-full rounded-lg border p-3 shadow-[0_14px_38px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_48px_rgba(15,23,42,0.28)] ${active ? "border-cyan-300 bg-gradient-to-br from-cyan-950 via-slate-900 to-fuchsia-950 ring-2 ring-cyan-300/60" : "border-white/10 bg-white/[0.96]"}`}>
     <div className={`relative h-28 overflow-hidden rounded-md bg-gradient-to-br ${game.accent} ${active ? "ring-2 ring-white/50" : ""}`}><Image src={game.visual} alt="" fill sizes="(min-width: 1024px) 220px, (min-width: 640px) 45vw, 90vw" unoptimized className="object-cover transition duration-500 group-hover:scale-105" /><span aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-slate-950/40 via-transparent to-white/10" /></div>
-    <div className="mt-3"><h2 className={`text-lg font-black leading-tight ${active ? "text-white" : "text-slate-950"}`}>{game.title}</h2><div className="mt-2 flex flex-wrap gap-1.5">{active && <Badge active>{t("games.playing")}</Badge>}{maintenance && !active && <Badge active={false} state>{t("games.maintenance")}</Badge>}{privateGame && <Badge active={active} state>{t("games.private")}</Badge>}{!localeAvailable && <Badge active={false} state>{t("games.japaneseOnly")}</Badge>}{localeAvailable && !uiLocaleAvailable && <Badge active={false} state>{t("games.englishUiPending")}</Badge>}{game.tags.map((tag) => <Badge key={tag} active={active} tag={tag}>{tag}</Badge>)}</div></div>
+    <div className="mt-3"><h2 className={`text-lg font-black leading-tight ${active ? "text-white" : "text-slate-950"}`}>{game.title}</h2><div className="mt-2 flex flex-wrap gap-1.5">{active && <Badge active>{t("games.playing")}</Badge>}{maintenance && !active && <Badge active={false} state>{t("games.maintenance")}</Badge>}{privateGame && <Badge active={active} state>{t("games.private")}</Badge>}{crossLocale && <Badge active={active} state ariaLabel={t("games.crossLocale")}>🌐 {t("games.crossLocale")}</Badge>}{!localeAvailable && <Badge active={false} state>{t("games.japaneseOnly")}</Badge>}{localeAvailable && !uiLocaleAvailable && <Badge active={false} state>{t("games.englishUiPending")}</Badge>}{game.tags.map((tag) => <Badge key={tag} active={active} tag={tag}>{tag}</Badge>)}</div></div>
     {activeRoom && <p className="mt-2 text-xs font-bold text-cyan-100">{t("games.roomJoined", { code: activeRoom.code })}</p>}
     <p className={`mt-2 min-h-10 text-xs leading-5 ${active ? "text-slate-200" : "text-slate-600"}`}>{game.summary}</p>
     {!localeAvailable && <p className="mt-2 rounded-md bg-violet-100 px-2 py-1.5 text-xs font-bold leading-5 text-violet-900">{t("games.languageUnavailable")}</p>}
@@ -161,6 +163,7 @@ function LobbyGameListRow({ game, operation, activeRoom, locale, favorite, onTog
   const maintenance = operation.maintenance;
   const active = Boolean(activeRoom);
   const privateGame = operation.publication === "private";
+  const crossLocale = gameSdkManifestSupportsCrossLocaleRooms({ localePolicy: game.localePolicy });
   const actionLabel = active
     ? t("games.return")
     : maintenance || unavailable
@@ -177,6 +180,7 @@ function LobbyGameListRow({ game, operation, activeRoom, locale, favorite, onTog
           {active && <Badge active>{t("games.playing")}</Badge>}
           {maintenance && !active && <Badge active={false} state>{t("games.maintenance")}</Badge>}
           {privateGame && <Badge active={active} state>{t("games.private")}</Badge>}
+          {crossLocale && <Badge active={active} state ariaLabel={t("games.crossLocale")}>🌐 {t("games.crossLocale")}</Badge>}
           {!localeAvailable && <Badge active={false} state>{t("games.japaneseOnly")}</Badge>}
           {localeAvailable && !uiLocaleAvailable && <Badge active={false} state>{t("games.englishUiPending")}</Badge>}
           {game.tags.map((tag) => <Badge key={tag} active={active} tag={tag}>{tag}</Badge>)}
@@ -214,7 +218,7 @@ function GameEntryAction({ game, activeRoom, disabled, onRememberWordWolf, child
   return <Link href={href} onClick={game.id === "wordwolf" && activeRoom ? onRememberWordWolf : undefined} className="block">{children}</Link>;
 }
 
-function Badge({ active, state = false, tag, children }: { active: boolean; state?: boolean; tag?: string; children: React.ReactNode }) {
+function Badge({ active, state = false, tag, ariaLabel, children }: { active: boolean; state?: boolean; tag?: string; ariaLabel?: string; children: React.ReactNode }) {
   const tone = state
     ? "border-amber-200 bg-amber-50 text-amber-800"
     : tag === "協力" || tag === "Co-op"
@@ -224,5 +228,5 @@ function Badge({ active, state = false, tag, children }: { active: boolean; stat
         : tag === "対戦" || tag === "Competitive"
           ? "border-rose-200 bg-rose-50 text-rose-700"
           : "border-violet-200 bg-violet-50 text-violet-700";
-  return <span className={`inline-flex max-w-full rounded-md border px-2 py-1 text-[11px] font-black leading-tight ${active ? "border-white/20 bg-white/10 text-white" : tone}`}>{children}</span>;
+  return <span aria-label={ariaLabel} className={`inline-flex max-w-full rounded-md border px-2 py-1 text-[11px] font-black leading-tight ${active ? "border-white/20 bg-white/10 text-white" : tone}`}>{children}</span>;
 }

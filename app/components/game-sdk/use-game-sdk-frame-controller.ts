@@ -159,6 +159,7 @@ export function useGameSdkFrameController(
     iframeRef.current?.contentWindow?.postMessage({
       type: "game-fields:room-snapshot",
       room: next,
+      presentationContext: { uiLocale: locale },
       ...(timing ? {
         timing: {
           requestRef: timing.requestRef,
@@ -167,7 +168,7 @@ export function useGameSdkFrameController(
         },
       } : {}),
     }, "*");
-  }, []);
+  }, [locale]);
 
   const acceptPackageRevision = useCallback((next: PackageRoom) => {
     const issue = gameSdkPackageRevisionIssue(packageRevision, next);

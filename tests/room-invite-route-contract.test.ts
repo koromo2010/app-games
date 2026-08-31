@@ -12,18 +12,8 @@ test("generic room invite route keeps normal player auth and existing room APIs"
   assert.match(page, /ROOM_CODE_PATTERN/);
   assert.match(page, /InviteRoomJoiner/);
 
-  for (const endpoint of [
-    "/api/wordwolf/rooms",
-    "/api/tahoiya/rooms",
-    "/api/hodoai/rooms",
-    "/api/kotoba-senpuku/rooms",
-    "/api/northern-branch/rooms",
-    "/api/nigoichi/rooms",
-    "/api/code-intercept/rooms",
-    "/api/daifugo/rooms",
-  ]) {
-    assert.match(joiner, new RegExp(endpoint.replaceAll("/", "\\/")));
-  }
+  assert.match(joiner, /builtInOnlineRoomDescriptors/);
+  assert.match(joiner, /const INVITE_TARGETS: InviteTarget\[\] = builtInOnlineRoomDescriptors/);
 
   assert.match(joiner, /method: "PATCH"/);
   assert.match(joiner, /type: "join-room"/);

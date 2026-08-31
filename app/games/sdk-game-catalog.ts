@@ -1,6 +1,7 @@
 import type { GameCatalogEntry, GameTag } from "./game-catalog";
 import { catalogEntryFromDefinition, lockedPlatformModules, type GameDefinition, type GameModulePolicy } from "./game-definition-source";
 import { isSdkPackageRevision } from "./sdk-game-preview-navigation";
+import type { GameSdkLocalePolicy } from "@game-fields/game-sdk";
 
 export type SdkGameDescriptor = {
   id: string;
@@ -12,6 +13,7 @@ export type SdkGameDescriptor = {
   tags?: string[];
   visual?: string;
   modules?: GameModulePolicy["capabilities"];
+  localePolicy?: GameSdkLocalePolicy;
 };
 
 const allowedTags = new Set<GameTag>([
@@ -37,6 +39,7 @@ export function sdkGamesForCatalog(creatorSlug: string, descriptors: readonly Sd
       accent: "from-cyan-300 via-emerald-200 to-amber-200",
       private: false,
       stats: "local-disabled",
+      ...(game.localePolicy ? { localePolicy: game.localePolicy } : {}),
     },
     runtime: {
       kind: "sdk-package",

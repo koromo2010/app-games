@@ -1,4 +1,5 @@
 import type { OnlineRoomRealtimeGame } from "./online-room-realtime-protocol.ts";
+import type { AppLocale } from "./app-locale.ts";
 
 export type OnlineRoomSpectatorAccess = {
   enabled: boolean;
@@ -181,5 +182,48 @@ export function presentOnlineRoomForSpectator(game: OnlineRoomRealtimeGame, room
     updatedAt: room.updatedAt,
     players,
     facts,
+  };
+}
+
+const spectatorEnglish: Record<string, string> = {
+  "ワードウルフ": "Word Wolf", "たほい屋": "Tahoiya", "ワードスケール": "Word Scale",
+  "ワードソナー": "Word Sonar", "ワードアウト": "Word Out", "ノーザンブランチ": "Northern Branch",
+  "コードインターセプト": "Code Intercept", "大富豪": "Daifugo", "SDKゲーム": "SDK game",
+  "ロビー": "Lobby", "結果": "Result", "対戦中": "Playing", "終了": "Finished",
+  "ヒント入力": "Clues", "投票": "Voting", "並べ替え": "Arrange", "回答": "Answer",
+  "ラウンド結果": "Round result", "最終結果": "Game result", "制限時間": "Time limit",
+  "終了理由": "Result reason", "なし": "None", "手番": "Turn", "脱落": "Out",
+};
+
+function localizeSpectatorText(value: string, locale: AppLocale) {
+  if (locale === "ja") return value;
+  if (spectatorEnglish[value]) return spectatorEnglish[value];
+  return value
+    .replace(/^(\d+)位(?:で上がり)?$/, "$1st place")
+    .replace(/^(\d+)点$/, "$1 points")
+    .replace(/^(\d+)秒$/, "$1 sec")
+    .replace(/^(\d+)枚$/, "$1 cards")
+    .replace(/^(\d+)人$/, "$1 players")
+    .replace(/^(\d+)件$/, "$1 items");
+}
+
+export function localizeOnlineRoomSpectatorSnapshot(
+  snapshot: OnlineRoomSpectatorSnapshot,
+  locale: AppLocale,
+): OnlineRoomSpectatorSnapshot {
+  if (locale === "ja") return snapshot;
+  return {
+    ...snapshot,
+    gameTitle: localizeSpectatorText(snapshot.gameTitle, locale),
+    phaseLabel: localizeSpectatorText(snapshot.phaseLabel, locale),
+    players: snapshot.players.map((player) => ({
+      ...player,
+      ...(player.status ? { status: localizeSpectatorText(player.status, locale) } : {}),
+      ...(player.metric ? { metric: localizeSpectatorText(player.metric, locale) } : {}),
+    })),
+    facts: snapshot.facts.map((fact) => ({
+      label: localizeSpectatorText(fact.label, locale),
+      value: localizeSpectatorText(fact.value, locale),
+    })),
   };
 }

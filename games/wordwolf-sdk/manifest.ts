@@ -5,6 +5,12 @@ export const wordWolfSdkManifest = defineGameManifest({
   id: "wordwolf-sdk",
   title: { ja: "ワードウルフ SDK", en: "Word Wolf SDK" },
   playMode: "online-room",
+  localePolicy: {
+    roomContentMode: "content-bound",
+    uiLocales: ["ja"],
+    contentLanguages: ["ja"],
+    defaultContentLanguage: "ja",
+  },
   minimumPlayers: 3,
   maximumPlayers: 20,
   supportsDebug: true,

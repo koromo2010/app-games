@@ -4,22 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PlayerSession } from "@/lib/player-session";
 import { gamePlayHref } from "@/lib/game-routes";
+import { builtInOnlineRoomDescriptors } from "@/lib/online-room-descriptors";
 
 type InviteTarget = {
   gameId: string;
   endpoint: string;
 };
 
-const INVITE_TARGETS: InviteTarget[] = [
-  { gameId: "wordwolf", endpoint: "/api/wordwolf/rooms" },
-  { gameId: "tahoiya", endpoint: "/api/tahoiya/rooms" },
-  { gameId: "hodoai", endpoint: "/api/hodoai/rooms" },
-  { gameId: "kotoba-senpuku", endpoint: "/api/kotoba-senpuku/rooms" },
-  { gameId: "northern-branch", endpoint: "/api/northern-branch/rooms" },
-  { gameId: "nigoichi", endpoint: "/api/nigoichi/rooms" },
-  { gameId: "code-intercept", endpoint: "/api/code-intercept/rooms" },
-  { gameId: "daifugo", endpoint: "/api/daifugo/rooms" },
-];
+const INVITE_TARGETS: InviteTarget[] = builtInOnlineRoomDescriptors;
 
 type RoomPayload = {
   room?: { code?: string; revision?: number } | null;

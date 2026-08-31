@@ -18,7 +18,7 @@ import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { publishOnlineRoomRevision } from "@/lib/online-room-realtime-server";
-import { assertRoomLanguageAccess, isLanguageBoundGame } from "@/lib/game-language";
+import { assertRoomContentLanguageAccess, isLanguageBoundGame } from "@/lib/game-language";
 
 function requestTarget(request: Request) {
   const url = new URL(request.url);
@@ -67,7 +67,13 @@ export async function GET(request: Request) {
     const playerId = player.id;
     const target = await loadTarget(request);
     if ("response" in target) return target.response;
-    if (isLanguageBoundGame(target.game)) assertRoomLanguageAccess(target.room, player.locale);
+    if (isLanguageBoundGame(target.game)) {
+      assertRoomContentLanguageAccess(
+        target.game,
+        target.room,
+        new URL(request.url).searchParams.get("contentLanguage") ?? player.locale,
+      );
+    }
     const policy = await loadOnlineRoomSpectatorPolicy(target.game, target.code, target.room.createdAt);
     const isHost = target.room.hostId === playerId;
     const isParticipant = target.room.players.some((player) => player.id === playerId);
@@ -79,7 +85,7 @@ export async function GET(request: Request) {
     return conditionalVersionedJsonResponse(
       request,
       `spectator:${target.game}:${target.code}:${target.room.revision}:${policy.updatedAt}:${isHost ? 1 : 0}`,
-      () => ({ snapshot: onlineRoomSpectatorSnapshot(target.game, target.room), access }),
+      () => ({ snapshot: onlineRoomSpectatorSnapshot(target.game, target.room, player.locale), access }),
     );
   } catch (error) {
     return commonOnlineRoomErrorResponse(error) ?? Response.json({ error: "Failed to load spectator view" }, { status: 500 });
@@ -92,10 +98,12 @@ export async function POST(request: Request) {
     const playerId = player.id;
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId });
     if (limited) return limited;
-    const body = await request.json() as { game?: unknown; code?: unknown; passphrase?: unknown };
+    const body = await request.json() as { game?: unknown; code?: unknown; passphrase?: unknown; contentLanguage?: unknown };
     const target = await loadTarget(request, body);
     if ("response" in target) return target.response;
-    if (isLanguageBoundGame(target.game)) assertRoomLanguageAccess(target.room, player.locale);
+    if (isLanguageBoundGame(target.game)) {
+      assertRoomContentLanguageAccess(target.game, target.room, body.contentLanguage ?? player.locale);
+    }
     const policy = await loadOnlineRoomSpectatorPolicy(target.game, target.code, target.room.createdAt);
     const isParticipant = target.room.players.some((player) => player.id === playerId);
     if (!isParticipant && !policy.enabled) return Response.json({ error: "Spectator access is not allowed" }, { status: 403 });
@@ -122,10 +130,12 @@ export async function PATCH(request: Request) {
     const playerId = player.id;
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId });
     if (limited) return limited;
-    const body = await request.json() as { game?: unknown; code?: unknown; enabled?: unknown };
+    const body = await request.json() as { game?: unknown; code?: unknown; enabled?: unknown; contentLanguage?: unknown };
     const target = await loadTarget(request, body);
     if ("response" in target) return target.response;
-    if (isLanguageBoundGame(target.game)) assertRoomLanguageAccess(target.room, player.locale);
+    if (isLanguageBoundGame(target.game)) {
+      assertRoomContentLanguageAccess(target.game, target.room, body.contentLanguage ?? player.locale);
+    }
     if (target.room.hostId !== playerId) return Response.json({ error: "Only the host can change spectator access" }, { status: 403 });
     if (typeof body.enabled !== "boolean") return Response.json({ error: "enabled is required" }, { status: 400 });
     const policy = await saveOnlineRoomSpectatorPolicy(target.game, target.code, target.room.createdAt, body.enabled);

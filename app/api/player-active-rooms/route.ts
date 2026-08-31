@@ -10,6 +10,7 @@ import { summarizePlayerActiveRoom, type PlayerActiveRoomSummarySource } from "@
 import { redisCommand } from "@/lib/redis-store";
 import { loadAndReconcileStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import { loadStoredWordWolfRoom } from "@/lib/wordwolf-room-store";
+import { builtInOnlineRoomDescriptors, type BuiltInCommonOnlineRoomGameId } from "@/lib/online-room-descriptors";
 
 type ActiveRoomDescriptor = {
   gameId: string;
@@ -17,16 +18,21 @@ type ActiveRoomDescriptor = {
   loadRoom: (code: string) => Promise<PlayerActiveRoomSummarySource | null>;
 };
 
-const descriptors: ActiveRoomDescriptor[] = [
-  { gameId: "wordwolf", activeKey: (id) => `wordwolf:player-active-room:${id}`, loadRoom: loadStoredWordWolfRoom },
-  { gameId: "tahoiya", activeKey: (id) => `tahoiya:player-active-room:${id}`, loadRoom: loadAndReconcileStoredTahoiyaRoom },
-  { gameId: "northern-branch", activeKey: (id) => `northern-branch:player-active-room:${id}`, loadRoom: loadStoredNorthernRoom },
-  { gameId: "hodoai", activeKey: (id) => `hodoai:player-active-room:${id}`, loadRoom: loadAndReconcileHodoaiRoom },
-  { gameId: "kotoba-senpuku", activeKey: (id) => `kotoba-senpuku:player-active-room:${id}`, loadRoom: loadAndReconcileKotobaSenpukuRoom },
-  { gameId: "nigoichi", activeKey: (id) => `nigoichi:player-active-room:${id}`, loadRoom: loadStoredNigoichiRoom },
-  { gameId: "code-intercept", activeKey: (id) => `code-intercept:player-active-room:${id}`, loadRoom: loadStoredCodeInterceptRoom },
-  { gameId: "daifugo", activeKey: (id) => `daifugo:player-active-room:${id}`, loadRoom: loadStoredDaifugoRoom },
-];
+const activeRoomLoaders: Record<BuiltInCommonOnlineRoomGameId, ActiveRoomDescriptor["loadRoom"]> = {
+  wordwolf: loadStoredWordWolfRoom,
+  tahoiya: loadAndReconcileStoredTahoiyaRoom,
+  "northern-branch": loadStoredNorthernRoom,
+  hodoai: loadAndReconcileHodoaiRoom,
+  "kotoba-senpuku": loadAndReconcileKotobaSenpukuRoom,
+  nigoichi: loadStoredNigoichiRoom,
+  "code-intercept": loadStoredCodeInterceptRoom,
+  daifugo: loadStoredDaifugoRoom,
+};
+
+const descriptors: ActiveRoomDescriptor[] = builtInOnlineRoomDescriptors.map((descriptor) => ({
+  ...descriptor,
+  loadRoom: activeRoomLoaders[descriptor.gameId],
+}));
 
 export async function GET() {
   try {

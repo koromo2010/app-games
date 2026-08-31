@@ -2,6 +2,7 @@ import registry from "../../config/game-registry.json" with { type: "json" };
 import { builtInCapabilityPolicy } from "./built-in-game-module-policies";
 import { sdkGamePreviewHref } from "./sdk-game-preview-navigation";
 import { gameCatalogHref } from "@/lib/game-routes";
+import { builtInGameLocaleRegistry, type GameLocalePolicy } from "@/lib/game-locale-registry";
 
 export type GameDefinitionTag = "対戦" | "協力" | "チーム戦" | "正体隠匿" | "会話" | "ブラフ" | "作文" | "戦略" | "連想" | "推理" | "お絵描き";
 
@@ -16,6 +17,7 @@ export type GameCatalogDefinition = {
   accent: string;
   private: boolean;
   stats: "account" | "local-disabled";
+  localePolicy?: GameLocalePolicy;
 };
 
 export type BuiltInGameRuntimeBinding = {
@@ -114,6 +116,7 @@ export function builtInGameDefinitions(): GameDefinition[] {
       accent: game.accent,
       private: game.private,
       stats: game.stats as GameCatalogDefinition["stats"],
+      localePolicy: builtInGameLocaleRegistry[game.id as keyof typeof builtInGameLocaleRegistry].policy,
     },
     runtime: {
       kind: "built-in" as const,

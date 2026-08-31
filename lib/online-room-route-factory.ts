@@ -3,8 +3,8 @@ import { actionRequiresDebugAccess, requirePlayerDebugAccess, roomRequestsDebugM
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import {
   assertGameLocaleAvailable,
-  assertRoomLanguageAccess,
-  filterRoomPageByLocale,
+  assertRoomContentLanguageAccess,
+  filterRoomPageByContentLanguage,
   isLanguageBoundGame,
 } from "@/lib/game-language";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
@@ -140,9 +140,10 @@ export function createOnlineRoomRouteHandlers<Room extends OnlineRoomRouteRoom, 
       const session = await loadStoredPlayerSession(authenticatedPlayerId);
       return conditionalJsonResponse(
         request,
-        filterRoomPageByLocale(
+        filterRoomPageByContentLanguage(
+          config.gameId,
           page as OnlineRoomRouteListPage<Choice & { contentLocale?: unknown }>,
-          session?.locale,
+          url.searchParams.get("contentLanguage") ?? session?.locale,
         ),
       );
     } catch (error) {
@@ -162,13 +163,18 @@ export function createOnlineRoomRouteHandlers<Room extends OnlineRoomRouteRoom, 
 
     try {
       const session = await requireAuthenticatedPlayer();
-      if (isLanguageBoundGame(config.gameId)) assertGameLocaleAvailable(config.gameId, session.locale);
       const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: session.id });
       if (limited) return limited;
       const body = await request.json() as CreateContext["body"];
       const requestedRoom = body.room && typeof body.room === "object"
         ? body.room as Record<string, unknown>
         : null;
+      if (isLanguageBoundGame(config.gameId)) {
+        assertGameLocaleAvailable(
+          config.gameId,
+          requestedRoom?.contentLanguage ?? requestedRoom?.contentLocale ?? session.locale,
+        );
+      }
       if (roomRequestsDebugMode(requestedRoom)) await requirePlayerDebugAccess(session.id);
       fields = {
         ...fields,
@@ -180,7 +186,7 @@ export function createOnlineRoomRouteHandlers<Room extends OnlineRoomRouteRoom, 
         session,
         telemetry,
         body,
-        roomDraft: authenticatedRoomDraft(body.room, session),
+        roomDraft: authenticatedRoomDraft(body.room, session, config.gameId),
       });
       telemetry.success("room.mutation", { ...fields, ...config.telemetryFields(room) });
       return Response.json({ room: config.read.presentRoom(room, session.id) });
@@ -221,7 +227,11 @@ export function createOnlineRoomRouteHandlers<Room extends OnlineRoomRouteRoom, 
       if (action.type === "join-room" && isLanguageBoundGame(config.gameId)) {
         targetRoom = await config.read.loadRoom(code);
         if (!targetRoom) return Response.json({ error: "Room not found" }, { status: 404 });
-        assertRoomLanguageAccess(targetRoom, session.locale);
+        assertRoomContentLanguageAccess(
+          config.gameId,
+          targetRoom,
+          action.contentLanguage ?? body.contentLanguage ?? session.locale,
+        );
       }
       if (action.type === "join-room") {
         action = { ...action, player: authenticatedRoomPlayer(session) };

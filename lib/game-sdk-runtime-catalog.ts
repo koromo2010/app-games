@@ -159,6 +159,7 @@ export async function loadApprovedGameSdkCatalog(
       stats: moduleProfile.stats.mode === "required"
         ? "account"
         : "local-disabled",
+      ...(game.manifest.localePolicy ? { localePolicy: game.manifest.localePolicy } : {}),
     };
   });
 }

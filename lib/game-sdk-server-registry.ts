@@ -1,4 +1,4 @@
-import type { GameSdkSettingDefinition } from "@game-fields/game-sdk";
+import type { GameSdkLocalePolicy, GameSdkSettingDefinition } from "@game-fields/game-sdk";
 import {
   createInitialGameSdkModuleProfile,
   type GameSdkModuleProfile,
@@ -41,6 +41,7 @@ export type ApprovedGameSdkRegistration = {
   moduleProfile: GameSdkModuleProfile;
   settings: readonly GameSdkSettingDefinition[];
   rules: readonly string[];
+  localePolicy?: GameSdkLocalePolicy;
   createAdapter(
     resolveIdentity: () => Promise<GameFieldsAuthenticatedIdentity>,
     request: Request,
@@ -62,6 +63,7 @@ const registrations: readonly ApprovedGameSdkRegistration[] = [
     moduleProfile: createInitialGameSdkModuleProfile(),
     settings: wordWolfSdkServerModule.manifest.settings ?? [],
     rules: (wordWolfSdkServerModule.manifest.rules ?? []).map((rule) => rule.ja),
+    localePolicy: wordWolfSdkServerModule.manifest.localePolicy,
     createAdapter(resolveIdentity, request, playerId) {
       return createAuthenticatedGameSdkPlatformAdapter({
         module: wordWolfSdkServerModule,

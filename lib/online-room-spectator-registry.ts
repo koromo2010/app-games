@@ -9,9 +9,11 @@ import {
   type OnlineRoomRealtimeGame,
 } from "./online-room-realtime-protocol.ts";
 import {
+  localizeOnlineRoomSpectatorSnapshot,
   presentOnlineRoomForSpectator,
   type OnlineRoomSpectatorSnapshot,
 } from "./online-room-spectator.ts";
+import type { AppLocale } from "./app-locale.ts";
 import { loadAndReconcileStoredTahoiyaRoom } from "./tahoiya-room-store.ts";
 import { loadStoredWordWolfRoom } from "./wordwolf-room-store.ts";
 import { approvedGameSdkRegistration } from "./game-sdk-server-registry.ts";
@@ -101,7 +103,7 @@ export async function loadOnlineRoomForSpectator(
   return await loaders[game](code) as SpectatorSourceRoom | null;
 }
 
-export function onlineRoomSpectatorSnapshot(game: OnlineRoomRealtimeGame, room: SpectatorSourceRoom) {
+export function onlineRoomSpectatorSnapshot(game: OnlineRoomRealtimeGame, room: SpectatorSourceRoom, locale: AppLocale = "ja") {
   if (game.startsWith("sdk:")) {
     const timer = room.timer && typeof room.timer === "object"
       ? room.timer as { durationSeconds?: unknown; deadlineAt?: unknown }
@@ -125,7 +127,7 @@ export function onlineRoomSpectatorSnapshot(game: OnlineRoomRealtimeGame, room: 
         ))
         .map((ranking) => [ranking.participantId, ranking]),
     );
-    return {
+    return localizeOnlineRoomSpectatorSnapshot({
       game,
       gameTitle: room.gameTitle ?? "SDKゲーム",
       code: room.code,
@@ -161,7 +163,7 @@ export function onlineRoomSpectatorSnapshot(game: OnlineRoomRealtimeGame, room: 
           value: result.reason.slice(0, 120),
         }] : []),
       ],
-    } satisfies OnlineRoomSpectatorSnapshot;
+    } satisfies OnlineRoomSpectatorSnapshot, locale);
   }
-  return presentOnlineRoomForSpectator(game, room);
+  return localizeOnlineRoomSpectatorSnapshot(presentOnlineRoomForSpectator(game, room), locale);
 }

@@ -1,29 +1,27 @@
 import { normalizeAppLocale, type AppLocale } from "./app-locale.ts";
+import {
+  builtInGameLocaleRegistration,
+  builtInGameLocaleRegistry,
+} from "./game-locale-registry.ts";
 
-export const languageBoundGameIds = [
-  "wordwolf",
-  "tahoiya",
-  "hodoai",
-  "kotoba-senpuku",
-  "nigoichi",
-  "code-intercept",
-] as const;
+export type LanguageBoundGameId =
+  | "wordwolf"
+  | "tahoiya"
+  | "hodoai"
+  | "kotoba-senpuku"
+  | "nigoichi"
+  | "code-intercept";
 
-export type LanguageBoundGameId = (typeof languageBoundGameIds)[number];
+export const languageBoundGameIds = Object.entries(builtInGameLocaleRegistry)
+  .filter(([, registration]) => registration.policy.roomContentMode === "content-bound")
+  .map(([gameId]) => gameId) as LanguageBoundGameId[];
 
-// Add a locale here only after that game's word/theme/content sources support it.
-export const gameContentLocales: Record<LanguageBoundGameId, readonly AppLocale[]> = {
-  wordwolf: ["ja"],
-  tahoiya: ["ja"],
-  hodoai: ["ja"],
-  "kotoba-senpuku": ["ja"],
-  nigoichi: ["ja"],
-  "code-intercept": ["ja"],
-};
-
-// Content-language compatibility and translated UI availability are separate.
-// Non-language games may share rooms across locales even while their English UI is still rolling out.
-const englishUiGameIds = new Set(["daifugo"]);
+export const gameContentLocales = Object.fromEntries(
+  languageBoundGameIds.map((gameId) => [
+    gameId,
+    builtInGameLocaleRegistry[gameId].policy.contentLanguages,
+  ]),
+) as Record<LanguageBoundGameId, readonly AppLocale[]>;
 
 export function isLanguageBoundGame(gameId: string): gameId is LanguageBoundGameId {
   return languageBoundGameIds.includes(gameId as LanguageBoundGameId);
@@ -44,13 +42,41 @@ export function isGameLocaleAvailable(gameId: string, value: unknown) {
 
 export function isGameUiLocaleAvailable(gameId: string, value: unknown) {
   const locale = normalizeAppLocale(value);
-  return locale === "ja" || englishUiGameIds.has(gameId);
+  return builtInGameLocaleRegistration(gameId)?.policy.uiLocales.includes(locale) ?? locale === "ja";
+}
+
+export function gameSupportsCrossLocaleRooms(gameId: string) {
+  const policy = builtInGameLocaleRegistration(gameId)?.policy;
+  return policy?.roomContentMode === "neutral"
+    && policy.uiLocales.includes("ja")
+    && policy.uiLocales.includes("en");
 }
 
 export function assertRoomLanguageAccess(room: { contentLocale?: unknown }, playerLocale: unknown) {
   if (normalizeRoomContentLocale(room.contentLocale) !== normalizeAppLocale(playerLocale)) {
     throw new Error("ROOM_LANGUAGE_MISMATCH");
   }
+}
+
+export function assertRoomContentLanguageAccess(
+  gameId: string,
+  room: { contentLanguage?: unknown; contentLocale?: unknown },
+  requestedContentLanguage: unknown,
+) {
+  const registration = builtInGameLocaleRegistration(gameId);
+  if (!registration || registration.policy.roomContentMode === "neutral") return;
+  const roomLanguage = roomContentLanguage(room, gameId);
+  const requested = normalizeAppLocale(requestedContentLanguage);
+  if (!registration.policy.contentLanguages?.includes(requested)) {
+    throw new Error("GAME_LANGUAGE_UNAVAILABLE");
+  }
+  if (roomLanguage !== requested) throw new Error("ROOM_LANGUAGE_MISMATCH");
+}
+
+export function roomContentLanguage(room: { contentLanguage?: unknown; contentLocale?: unknown }, gameId: string): AppLocale | undefined {
+  const registration = builtInGameLocaleRegistration(gameId);
+  if (!registration || registration.policy.roomContentMode === "neutral") return undefined;
+  return normalizeAppLocale(room.contentLanguage ?? room.contentLocale ?? registration.policy.defaultContentLanguage);
 }
 
 export function filterRoomChoicesByLocale<T extends { contentLocale?: unknown }>(rooms: T[], playerLocale: unknown) {
@@ -63,4 +89,18 @@ export function filterRoomPageByLocale<T extends { contentLocale?: unknown }>(
   playerLocale: unknown,
 ) {
   return { ...page, rooms: filterRoomChoicesByLocale(page.rooms, playerLocale) };
+}
+
+export function filterRoomPageByContentLanguage<T extends { contentLanguage?: unknown; contentLocale?: unknown }>(
+  gameId: string,
+  page: { rooms: T[]; nextCursor?: string | null },
+  requestedContentLanguage: unknown,
+) {
+  const registration = builtInGameLocaleRegistration(gameId);
+  if (!registration || registration.policy.roomContentMode === "neutral") return page;
+  const requested = normalizeAppLocale(requestedContentLanguage);
+  return {
+    ...page,
+    rooms: page.rooms.filter((room) => roomContentLanguage(room, gameId) === requested),
+  };
 }

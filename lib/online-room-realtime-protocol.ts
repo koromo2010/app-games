@@ -1,13 +1,6 @@
-export const onlineRoomRealtimeGames = [
-  "code-intercept",
-  "daifugo",
-  "hodoai",
-  "kotoba-senpuku",
-  "nigoichi",
-  "northern-branch",
-  "tahoiya",
-  "wordwolf",
-] as const;
+import { builtInCommonOnlineRoomGameIds } from "./game-locale-registry.ts";
+
+export const onlineRoomRealtimeGames = builtInCommonOnlineRoomGameIds;
 
 export type BuiltInOnlineRoomRealtimeGame = typeof onlineRoomRealtimeGames[number];
 export type GameSdkOnlineRoomRealtimeGame = `sdk:${string}`;

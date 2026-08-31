@@ -1,6 +1,12 @@
 export const GAME_SDK_VERSION = 2 as const;
 
 export type GameSdkLocale = "ja" | "en";
+export type GameSdkLocalePolicy = Readonly<{
+  roomContentMode: "neutral" | "content-bound";
+  uiLocales: readonly GameSdkLocale[];
+  contentLanguages?: readonly GameSdkLocale[];
+  defaultContentLanguage?: GameSdkLocale;
+}>;
 export type GameSdkPlayMode = "online-room" | "local-pass-and-play";
 export type GameSdkPhase = "entry" | "lobby" | "playing" | "result";
 export type GameSdkViewerRole = "host" | "player" | "spectator" | "anonymous";
@@ -365,7 +371,47 @@ export type GameSdkManifest = {
   usesLlm: boolean;
   settings?: readonly GameSdkSettingDefinition[];
   rules?: readonly Readonly<Record<GameSdkLocale, string>>[];
+  /**
+   * Optional for legacy packages. Missing policy remains loadable but is not
+   * evidence of cross-locale Room eligibility.
+   */
+  localePolicy?: GameSdkLocalePolicy;
 };
+
+export function assertGameSdkLocalePolicy(policy: GameSdkLocalePolicy): void {
+  const supported = new Set<GameSdkLocale>(["ja", "en"]);
+  if (
+    !Array.isArray(policy.uiLocales)
+    || policy.uiLocales.length === 0
+    || policy.uiLocales.some((locale) => !supported.has(locale))
+    || new Set(policy.uiLocales).size !== policy.uiLocales.length
+  ) throw new Error("Game SDK localePolicy.uiLocales is invalid.");
+  if (policy.roomContentMode === "neutral") {
+    if (policy.contentLanguages !== undefined || policy.defaultContentLanguage !== undefined) {
+      throw new Error("Game SDK neutral localePolicy cannot declare content languages.");
+    }
+    return;
+  }
+  if (policy.roomContentMode !== "content-bound") {
+    throw new Error("Game SDK localePolicy.roomContentMode is invalid.");
+  }
+  const languages = policy.contentLanguages;
+  if (
+    !Array.isArray(languages)
+    || languages.length === 0
+    || languages.some((locale) => !supported.has(locale))
+    || new Set(languages).size !== languages.length
+    || !policy.defaultContentLanguage
+    || !languages.includes(policy.defaultContentLanguage)
+  ) throw new Error("Game SDK content-bound localePolicy is invalid.");
+}
+
+export function gameSdkManifestSupportsCrossLocaleRooms(manifest: Pick<GameSdkManifest, "localePolicy">) {
+  const policy = manifest.localePolicy;
+  return policy?.roomContentMode === "neutral"
+    && policy.uiLocales.includes("ja")
+    && policy.uiLocales.includes("en");
+}
 
 /**
  * A viewer identity already resolved by the platform. Game packages may use it
@@ -554,6 +600,7 @@ export function assertGameManifest(manifest: GameSdkManifest): void {
       throw new Error(`Game SDK manifest ${field} must be boolean.`);
     }
   }
+  if (manifest.localePolicy) assertGameSdkLocalePolicy(manifest.localePolicy);
   parseGameSdkSettingDefinitions(manifest.settings, {
     requireTimeLimit: manifest.playMode === "online-room",
   });
