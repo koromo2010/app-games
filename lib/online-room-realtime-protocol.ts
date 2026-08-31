@@ -13,10 +13,10 @@ export type OnlineRoomRealtimeGame =
 export type OnlineRoomSubscription = {
   type: "subscribe";
   capability: string;
-  families: ["room-revision"];
+  families: [OnlineRoomNotificationFamily];
 };
 
-export const onlineRoomNotificationFamilies = ["room-revision"] as const;
+export const onlineRoomNotificationFamilies = ["room-revision", "chat-hint"] as const;
 export type OnlineRoomNotificationFamily = typeof onlineRoomNotificationFamilies[number];
 
 export type OnlineRoomRevisionEvent = {
@@ -26,6 +26,17 @@ export type OnlineRoomRevisionEvent = {
   revision: number;
   timestamp: number;
 };
+
+export type OnlineRoomChatHintEvent = {
+  type: "room-chat-updated";
+  game: OnlineRoomRealtimeGame;
+  code: string;
+  roomInstanceId: string;
+  latestCursor: string;
+  timestamp: number;
+};
+
+export type OnlineRoomRealtimeEvent = OnlineRoomRevisionEvent | OnlineRoomChatHintEvent;
 
 export const onlineRoomRealtimeTimings = {
   reconciliation: 45_000,
@@ -73,9 +84,26 @@ export function parseOnlineRoomSubscription(value: unknown): OnlineRoomSubscript
     && /^[A-Za-z0-9_-]{80,420}\.[A-Za-z0-9_-]{43}$/.test(input.capability)
     && Array.isArray(input.families)
     && input.families.length === 1
-    && input.families[0] === "room-revision"
-    ? { type: "subscribe", capability: input.capability, families: ["room-revision"] }
+    && onlineRoomNotificationFamilies.includes(input.families[0] as OnlineRoomNotificationFamily)
+    ? { type: "subscribe", capability: input.capability, families: [input.families[0] as OnlineRoomNotificationFamily] }
     : null;
+}
+
+export function parseOnlineRoomChatHintEvent(value: unknown): OnlineRoomChatHintEvent | null {
+  if (!value || typeof value !== "object") return null;
+  const input = value as Record<string, unknown>;
+  const game = normalizeOnlineRoomRealtimeGame(input.game);
+  const code = game ? normalizeOnlineRoomRealtimeCode(game, input.code) : "";
+  return input.type === "room-chat-updated" && game && code
+    && typeof input.roomInstanceId === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(input.roomInstanceId)
+    && typeof input.latestCursor === "string" && input.latestCursor.length <= 320
+    && typeof input.timestamp === "number" && Number.isFinite(input.timestamp)
+    ? { type: "room-chat-updated", game, code, roomInstanceId: input.roomInstanceId, latestCursor: input.latestCursor, timestamp: input.timestamp }
+    : null;
+}
+
+export function parseOnlineRoomRealtimeEvent(value: unknown): OnlineRoomRealtimeEvent | null {
+  return parseOnlineRoomRevisionEvent(value) ?? parseOnlineRoomChatHintEvent(value);
 }
 
 export function parseOnlineRoomRevisionEvent(value: unknown): OnlineRoomRevisionEvent | null {

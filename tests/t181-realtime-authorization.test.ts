@@ -39,7 +39,7 @@ test("T181 capability roundtrip binds the full authoritative target", async () =
   assert.ok(token);
   assert.ok(token.length < 421);
   assert.deepEqual(await authorizer.authorize(token), {
-    ...base, version: 1, family: "room-revision", scope: "room:revision:read", issuedAt: 10_000, expiresAt: 70_000,
+    ...base, version: 2, family: "room-revision", scope: "room:revision:read", issuedAt: 10_000, expiresAt: 70_000,
   });
 });
 

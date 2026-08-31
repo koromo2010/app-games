@@ -24,6 +24,7 @@ import type {
   SafeCommand,
 } from "./game-sdk-frame-types";
 import type { GameSdkPackageRevisionIssue } from "@/lib/game-sdk-package-revision";
+import { CommonRoomChatMount } from "@/app/components/room-chat/CommonRoomChatMount";
 
 export type GameSdkFrameViewProps = {
   // top level
@@ -349,7 +350,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
     );
   }
 
-  return (
+  return (<>
     <main className={`min-h-screen bg-slate-950 px-4 py-8 text-white ${gameTopBannerOffsetClass}`}>
       {previewOnly && (
         <div
@@ -528,5 +529,6 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
         />
       )}
     </main>
-  );
+    {!previewOnly && <CommonRoomChatMount game={`sdk:${gameId}`} room={room} />}
+  </>);
 }

@@ -2,9 +2,11 @@ import { createClient } from "redis";
 import type { WebSocket } from "ws";
 import {
   onlineRoomRealtimeChannel,
-  parseOnlineRoomRevisionEvent,
+  parseOnlineRoomRealtimeEvent,
   type OnlineRoomRealtimeGame,
   type OnlineRoomRevisionEvent,
+  type OnlineRoomChatHintEvent,
+  type OnlineRoomRealtimeEvent,
   type OnlineRoomSubscription,
 } from "./online-room-realtime-protocol.ts";
 import type { OnlineRoomRealtimeCapability } from "./online-room-realtime-capability.ts";
@@ -69,13 +71,13 @@ function fields(flat: string[]) {
   return result;
 }
 
-function send(ws: WebSocket, event: OnlineRoomRevisionEvent | { type: "subscribed" }) {
+function send(ws: WebSocket, event: OnlineRoomRealtimeEvent | { type: "subscribed" }) {
   if (ws.readyState !== 1) return;
   ws.send(JSON.stringify(event));
 }
 
-export async function deliverOnlineRoomRevision(
-  event: OnlineRoomRevisionEvent,
+export async function deliverOnlineRoomEvent(
+  event: OnlineRoomRealtimeEvent,
   sockets: Map<WebSocket, OnlineRoomRealtimeSocketState> = hub.sockets,
   authorize: (token: string) => Promise<OnlineRoomRealtimeCapability | null> = authorizeCapability,
 ) {
@@ -84,6 +86,8 @@ export async function deliverOnlineRoomRevision(
     for (const [ws, state] of sockets) {
       const previous = state.capability;
       if (!previous || onlineRoomRealtimeChannel(previous.game, previous.code) !== channel) continue;
+      const family = event.type === "room-updated" ? "room-revision" : "chat-hint";
+      if (previous.family !== family || (event.type === "room-chat-updated" && previous.roomInstanceId !== event.roomInstanceId)) continue;
       const current = state.capabilityToken ? await authorize(state.capabilityToken) : null;
       if (!current || current.actorId !== state.actorId) {
         state.capability = null;
@@ -96,10 +100,14 @@ export async function deliverOnlineRoomRevision(
   }
 }
 
+export async function deliverOnlineRoomRevision(event: OnlineRoomRevisionEvent, sockets: Map<WebSocket, OnlineRoomRealtimeSocketState> = hub.sockets, authorize: (token: string) => Promise<OnlineRoomRealtimeCapability | null> = authorizeCapability) {
+  return deliverOnlineRoomEvent(event, sockets, authorize);
+}
+
 function parseStoredEvent(raw: string | undefined) {
   if (!raw) return null;
   try {
-    return parseOnlineRoomRevisionEvent(JSON.parse(raw));
+    return parseOnlineRoomRealtimeEvent(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -145,7 +153,7 @@ async function runStream(url: string, keyPrefix: string) {
         for (const [id, flat] of entries) {
           hub.lastEventId = id;
           const event = parseStoredEvent(fields(flat).d);
-          if (event) await deliverOnlineRoomRevision(event);
+          if (event) await deliverOnlineRoomEvent(event);
         }
       }
     }
@@ -203,7 +211,7 @@ export async function subscribeOnlineRoomSocket(ws: WebSocket, subscription: Onl
   const state = hub.sockets.get(ws);
   if (!state) return false;
   const capability = await authorizeCapability(subscription.capability);
-  if (!capability || capability.actorId !== state.actorId) {
+  if (!capability || capability.actorId !== state.actorId || capability.family !== subscription.families[0]) {
     state.capability = null;
     state.capabilityToken = null;
     ws.close(1008, "authorization-denied");
@@ -237,6 +245,22 @@ export async function publishOnlineRoomRevision(game: OnlineRoomRealtimeGame, ro
     game,
     code: room.code.trim().toUpperCase(),
     revision: room.revision,
+    timestamp: Date.now(),
+  };
+  await redisCommand<string>([
+    "XADD", eventStreamKey, "MAXLEN", "~", String(eventStreamMaxLength), "*", "d", JSON.stringify(event),
+  ]);
+  return true;
+}
+
+export async function publishRoomChatHint(game: OnlineRoomRealtimeGame, code: string, roomInstanceId: string, latestCursor: string) {
+  if (!onlineRoomRealtimeEnabled()) return false;
+  const event: OnlineRoomChatHintEvent = {
+    type: "room-chat-updated",
+    game,
+    code: code.trim().toUpperCase(),
+    roomInstanceId,
+    latestCursor,
     timestamp: Date.now(),
   };
   await redisCommand<string>([

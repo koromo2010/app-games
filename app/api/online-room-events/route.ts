@@ -12,6 +12,7 @@ import {
 } from "@/lib/online-room-realtime-server";
 import { normalizeOnlineRoomRealtimeCode, normalizeOnlineRoomRealtimeGame, parseOnlineRoomSubscription } from "@/lib/online-room-realtime-protocol";
 import { createOnlineRoomRealtimeAuthorizer } from "@/lib/online-room-realtime-authorization";
+import { parseOnlineRoomRealtimeCapability } from "@/lib/online-room-realtime-capability";
 import { productionOnlineRoomRealtimeAuthorizationDriver } from "@/lib/online-room-realtime-provider";
 import { getAuthenticatedPlayerId } from "@/lib/player-auth";
 
@@ -32,14 +33,18 @@ export async function POST(request: Request) {
   if (!onlineRoomRealtimeEnabled() || !onlineRoomRealtimeSocketConfigured()) return concealed();
   const actorId = await getAuthenticatedPlayerId().catch(() => null);
   if (!actorId) return concealed();
-  const body = await request.json().catch(() => null) as { game?: unknown; code?: unknown; role?: unknown } | null;
+  const body = await request.json().catch(() => null) as { game?: unknown; code?: unknown; role?: unknown; family?: unknown; roomInstanceId?: unknown } | null;
   const game = normalizeOnlineRoomRealtimeGame(body?.game);
   const code = game ? normalizeOnlineRoomRealtimeCode(game, body?.code) : "";
   const role = body?.role === "spectator" ? "spectator" : body?.role === undefined || body?.role === "participant" ? "participant" : null;
-  if (!game || !code || !role) return concealed();
-  const capability = await authorizer.mint({ actorId, game, code, role }).catch(() => null);
+  const family = body?.family === "chat-hint" ? "chat-hint" : body?.family === undefined || body?.family === "room-revision" ? "room-revision" : null;
+  const expectedRoomInstanceId = typeof body?.roomInstanceId === "string" ? body.roomInstanceId : undefined;
+  if (!game || !code || !role || !family) return concealed();
+  const capability = await authorizer.mint({ actorId, game, code, role, family, expectedRoomInstanceId }).catch(() => null);
+  const resolved = capability ? parseOnlineRoomRealtimeCapability(capability) : null;
   return capability
-    ? Response.json({ capability, family: "room-revision" }, { headers: { "Cache-Control": "no-store" } })
+    && resolved
+    ? Response.json({ capability, family, roomInstanceId: resolved.roomInstanceId }, { headers: { "Cache-Control": "no-store" } })
     : concealed();
 }
 

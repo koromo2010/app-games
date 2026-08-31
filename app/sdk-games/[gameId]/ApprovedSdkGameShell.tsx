@@ -28,6 +28,7 @@ import {
 import { useGameSdkActiveRoomRestore } from "@/app/hooks/use-game-sdk-active-room-restore";
 import { AppLink as Link } from "@/app/components/AppLink";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CommonRoomChatMount } from "@/app/components/room-chat/CommonRoomChatMount";
 
 type WordWolfRoomView = GameSdkOnlineRoomView<
   {
@@ -450,7 +451,7 @@ export function ApprovedSdkGameShell({
     );
   }
 
-  return (
+  return (<>
     <main className={`min-h-screen bg-slate-950 px-4 py-8 text-white ${gameTopBannerOffsetClass}`}>
       <GameSdkShellHeader
         eyebrow={`ROOM ${room.code}`}
@@ -813,5 +814,6 @@ export function ApprovedSdkGameShell({
         </section>
       </section>
     </main>
-  );
+    <CommonRoomChatMount game={`sdk:${gameId}`} room={room} />
+  </>);
 }

@@ -16,6 +16,7 @@ export type OnlineRoomRealtimeTarget = {
   targetDigest: string;
   role: OnlineRoomRealtimeRole;
   sessionEpoch: number;
+  roomExpiresAt?: number;
 };
 
 export type OnlineRoomRealtimeAuthorizationDriver = {
@@ -43,15 +44,18 @@ export function createOnlineRoomRealtimeAuthorizer(
 ) {
   const now = options.now ?? Date.now;
   return {
-    async mint(input: { actorId: string; game: OnlineRoomRealtimeGame; code: string; role?: OnlineRoomRealtimeRole }) {
+    async mint(input: { actorId: string; game: OnlineRoomRealtimeGame; code: string; role?: OnlineRoomRealtimeRole; family?: "room-revision" | "chat-hint"; expectedRoomInstanceId?: string }) {
       const target = await driver.resolve(input);
       if (!target) return null;
+      const family = input.family ?? "room-revision";
+      if ((input.role && input.role !== target.role)
+        || (family === "chat-hint" && (target.role !== "participant" || (input.expectedRoomInstanceId && input.expectedRoomInstanceId !== target.roomInstanceId)))) return null;
       const currentEpoch = await driver.sessionEpoch(input.actorId);
       if (currentEpoch !== target.sessionEpoch) return null;
       return createOnlineRoomRealtimeCapability({
         ...target,
-        family: "room-revision",
-        scope: "room:revision:read",
+        family,
+        scope: family === "chat-hint" ? "room:chat:read" : "room:revision:read",
       }, { now: now(), env: options.env });
     },
     async authorize(token: string) {

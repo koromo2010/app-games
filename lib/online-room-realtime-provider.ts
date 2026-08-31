@@ -89,6 +89,7 @@ export const productionOnlineRoomRealtimeAuthorizationDriver: OnlineRoomRealtime
       targetDigest: targetDigest(resolved.binding, sdkIdentity(resolved.target)),
       role: (role ?? "participant") as OnlineRoomRealtimeRole,
       sessionEpoch,
+      roomExpiresAt: resolved.target.expiresAt,
     };
   },
   sessionEpoch: loadOnlineRoomRealtimeSessionEpoch,

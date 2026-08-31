@@ -83,6 +83,20 @@ export const rateLimitPolicies = {
     ip: { limit: 2_500, windowMs: minute },
     player: { limit: 180, windowMs: minute },
   },
+  roomChatSend: {
+    id: "room-chat-send",
+    ip: { limit: 600, windowMs: minute },
+    player: { limit: 30, windowMs: minute },
+    room: { limit: 180, windowMs: minute },
+    failClosed: true,
+  },
+  roomChatRead: {
+    id: "room-chat-read",
+    ip: { limit: 1_800, windowMs: minute },
+    player: { limit: 180, windowMs: minute },
+    room: { limit: 900, windowMs: minute },
+    failClosed: true,
+  },
   sdkRoomMutation: {
     id: "sdk-room-mutation",
     ip: { limit: 2_500, windowMs: minute },
