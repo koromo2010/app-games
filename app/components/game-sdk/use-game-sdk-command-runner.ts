@@ -3,7 +3,6 @@
 import {
   useCallback,
   useMemo,
-  useRef,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
@@ -59,8 +58,6 @@ export function useGameSdkCommandRunner({
   wrapDebugCommand,
   debugViewer,
 }: Options) {
-  const attemptedTimerExpiryRef = useRef(new Set<string>());
-
   const run = useCallback(async (operation: () => Promise<PackageRoom>) => {
     if (pendingActionRef.current) return null;
     pendingActionRef.current = true;
@@ -100,26 +97,20 @@ export function useGameSdkCommandRunner({
     }
   }, [attachLatestRoom, attachRoom, handleRuntimeError, pendingActionRef, roomRef, runtime, setMessage, setPending]);
 
-  const send = useCallback(async (command: SafeCommand) => {
+  const send = useCallback(async (
+    command: SafeCommand,
+    options?: { commandId?: string },
+  ) => {
     const current = roomRef.current;
     if (!current) throw new Error("ROOM_REQUIRED");
 
     const isTimerExpiry = command.type === "room/expire-timer"
       && "turnSequence" in command
       && Number.isSafeInteger(command.turnSequence);
-    const turnSequence = isTimerExpiry ? Number(command.turnSequence) : null;
-    const expiryKey = turnSequence === null ? null : `${current.code}:${turnSequence}`;
-
-    if (expiryKey) {
-      if (attemptedTimerExpiryRef.current.has(expiryKey)) return current;
-      attemptedTimerExpiryRef.current.add(expiryKey);
-      if (attemptedTimerExpiryRef.current.size > 64) {
-        attemptedTimerExpiryRef.current = new Set([expiryKey]);
-      }
-    }
 
     const dispatch = async (room: PackageRoom) => (await runtime.sendCommand(room.code, {
       expectedRevision: room.revision,
+      ...(options?.commandId ? { commandId: options.commandId } : {}),
       command,
     }, {
       finalViewer: debugViewer,
@@ -132,25 +123,12 @@ export function useGameSdkCommandRunner({
         : await operation();
     } catch (error) {
       if (
-        expiryKey
-        && turnSequence !== null
+        isTimerExpiry
         && error instanceof GameSdkHttpClientRuntimeError
         && error.code === "STALE_REVISION"
       ) {
         const latest = await runtime.readRoom(current.code);
-        if (latest) {
-          attachLatestRoom(latest);
-          const latestTimer = latest.view.common.timer;
-          if (
-            latest.phase !== "result"
-            && latestTimer?.turnSequence === turnSequence
-            && latestTimer.deadlineAt !== null
-            && Date.now() >= latestTimer.deadlineAt
-          ) {
-            return dispatch(latest);
-          }
-          return latest;
-        }
+        if (latest) attachLatestRoom(latest);
       }
       throw error;
     }

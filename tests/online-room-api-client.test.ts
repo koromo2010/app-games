@@ -53,6 +53,25 @@ test("共通部屋APIエラーはHTTP statusとサーバーpayloadを保持す�
   );
 });
 
+test("共通部屋APIはauthoritative timer retry identityを保持する", async () => {
+  const client = createOnlineRoomApiClient<Room, Choice>({
+    endpoint: "/api/error/rooms",
+    fetcher: async () => Response.json({
+      error: "DAIFUGO_TIMER_NOT_EXPIRED",
+      errorCode: "DAIFUGO_TIMER_NOT_EXPIRED",
+      retryAfterMs: 125,
+      serverDeadlineAt: 5_000,
+    }, { status: 409 }),
+  });
+  await assert.rejects(
+    () => client.patch("ABCD", { type: "expire-turn" }),
+    (error: unknown) => error instanceof OnlineRoomApiError
+      && error.code === "DAIFUGO_TIMER_NOT_EXPIRED"
+      && error.retryAfterMs === 125
+      && error.serverDeadlineAt === 5_000,
+  );
+});
+
 test("部屋復帰はサーバーのactive roomを優先し、なければ前回コードを使う", async () => {
   const active = await restoreOnlineRoom({
     playerId: "p1",

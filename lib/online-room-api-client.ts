@@ -7,14 +7,38 @@ type RoomResponse<Room> = { room?: Room | null };
 type RoomListResponse<RoomChoice> = { rooms?: RoomChoice[] };
 
 export class OnlineRoomApiError extends Error {
+  readonly code: string;
   readonly status: number;
   readonly payload: unknown;
+  readonly retryAfterMs: number | null;
+  readonly serverDeadlineAt: number | null;
 
   constructor(code: string, status: number, payload: unknown = null) {
     super(code);
     this.name = "OnlineRoomApiError";
+    const details = payload && typeof payload === "object"
+      ? payload as {
+        error?: unknown;
+        errorCode?: unknown;
+        retryAfterMs?: unknown;
+        serverDeadlineAt?: unknown;
+      }
+      : null;
+    const payloadCode = typeof details?.errorCode === "string"
+      ? details.errorCode
+      : typeof details?.error === "string"
+        && /^[A-Z][A-Z0-9_]{1,79}$/.test(details.error)
+        ? details.error
+        : null;
+    this.code = payloadCode ?? code;
     this.status = status;
     this.payload = payload;
+    const retryAfterMs = Number(details?.retryAfterMs);
+    const serverDeadlineAt = Number(details?.serverDeadlineAt);
+    this.retryAfterMs = Number.isFinite(retryAfterMs) ? retryAfterMs : null;
+    this.serverDeadlineAt = Number.isFinite(serverDeadlineAt)
+      ? serverDeadlineAt
+      : null;
   }
 }
 

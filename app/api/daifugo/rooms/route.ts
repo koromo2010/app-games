@@ -25,6 +25,8 @@ const errorResponse = createOnlineRoomErrorResponder({
     DAIFUGO_INVALID_PLAY: { error: "Invalid play", status: 400 },
     DAIFUGO_ROOM_FORBIDDEN: { error: "Room action is not allowed", status: 403 },
     DAIFUGO_ROOM_CONFLICT: { error: "Room update conflicted; retry", status: 409 },
+    DAIFUGO_TIMER_EVENT_STALE: { error: "DAIFUGO_TIMER_EVENT_STALE", errorCode: "DAIFUGO_TIMER_EVENT_STALE", status: 409 },
+    DAIFUGO_TIMER_DISABLED: { error: "DAIFUGO_TIMER_DISABLED", errorCode: "DAIFUGO_TIMER_DISABLED", status: 409 },
     INVALID_DAIFUGO_ROOM: { error: "Invalid room", status: 400 },
   },
 });

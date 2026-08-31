@@ -35,6 +35,7 @@ export type CommonView = {
     startedAt: number | null;
     deadlineAt: number | null;
     turnSequence: number;
+    graceMs: number;
     ownerSeat?: number | null;
   };
   standardResult?: {

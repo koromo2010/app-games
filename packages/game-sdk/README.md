@@ -156,9 +156,12 @@ const appSet = defineGameSdkOnlineRoomAppSet({
 
 ゲーム固有クライアントはtimerの表示位置と見た目を選べますが、ブラウザから締切時刻や残り秒数を正本として送信しません。
 
-正式Room Shellはdeadlineと`turnSequence`だけを使って
-`room/expire-timer`を要求します。Runtimeはdeadline＋graceをサーバー時刻
-で再検証し、2回連続で時間切れになった本人だけを5秒へ短縮します。
+正式Room Shellは`deadlineAt`、`graceMs`、`turnSequence`を使い、HTTPの
+server `Date`で補正した共通時計から`room/expire-timer`を要求します。Runtimeは
+deadline＋graceをサーバー時刻で再検証します。早すぎる要求はserver deadlineと
+bounded `retryAfterMs`を返し、同じtimer generationを再armします。複数clientは
+timer ownerから順にclaimし、先行clientが停止しても一つのactive clientだけで
+最終的に確定できます。2回連続で時間切れになった本人だけを5秒へ短縮します。
 短縮解除は本人の`room/recover-timeout`だけです。
 
 結果後の`room/rematch`はhostだけが実行し、ほかの参加者は結果画面を保持します。

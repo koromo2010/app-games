@@ -18,7 +18,7 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - application/API route: 認証、入力検証、競合制御、domainの実行を担当する。
 - storage: Redisキーと永続化だけを担当する。
 - AI: `lib/game-llm.ts` の共通ゲートウェイを越えて事業者へ直接依存しない。
-- timer: `lib/game-timer` が締切・猶予・再試行時刻・一意イベントIDを共通管理する。ゲームdomainは期限後の具体的な状態遷移だけを持つ。
+- timer: `lib/game-timer` が締切・猶予・再試行時刻・一意イベントID・client finalization generationを共通管理する。ゲームdomainは期限後の具体的な状態遷移だけを持つ。
 
 ## 全オンラインゲームの共通クライアント境界
 

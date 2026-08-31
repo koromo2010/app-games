@@ -109,6 +109,11 @@ export type GameSdkHttpClientRuntimeOptions = {
   reconciliationInterval?: number;
   webSocketFactory?: (url: string) => GameSdkWebSocketLike;
   fetcher?: Fetcher;
+  observeServerDate?(
+    dateHeader: string | null,
+    requestedAt: number,
+    receivedAt: number,
+  ): void;
   onRoomReadTelemetry?(event: GameSdkRoomReadTelemetryEvent): void;
   onCommandTiming?(event: GameSdkCommandTransportTiming): void;
 };
@@ -117,6 +122,8 @@ export class GameSdkHttpClientRuntimeError extends Error {
   readonly code: string;
   readonly status: number;
   readonly payload: unknown;
+  readonly retryAfterMs: number | null;
+  readonly serverDeadlineAt: number | null;
 
   constructor(code: string, status: number, payload: unknown = null) {
     super(code);
@@ -124,6 +131,15 @@ export class GameSdkHttpClientRuntimeError extends Error {
     this.code = code;
     this.status = status;
     this.payload = payload;
+    const details = payload && typeof payload === "object"
+      ? payload as { retryAfterMs?: unknown; serverDeadlineAt?: unknown }
+      : null;
+    const retryAfterMs = Number(details?.retryAfterMs);
+    const serverDeadlineAt = Number(details?.serverDeadlineAt);
+    this.retryAfterMs = Number.isFinite(retryAfterMs) ? retryAfterMs : null;
+    this.serverDeadlineAt = Number.isFinite(serverDeadlineAt)
+      ? serverDeadlineAt
+      : null;
   }
 }
 
@@ -211,12 +227,15 @@ async function requestJson(
   input: RequestInfo | URL,
   init: RequestInit,
   fallbackError: string,
+  observeServerDate?: GameSdkHttpClientRuntimeOptions["observeServerDate"],
 ) {
+  const requestedAt = Date.now();
   const response = await fetcher(input, {
     cache: "no-store",
     credentials: "same-origin",
     ...init,
   });
+  observeServerDate?.(response.headers.get("date"), requestedAt, Date.now());
   const payload = await readPayload(response);
   if (!response.ok) {
     throw new GameSdkHttpClientRuntimeError(
@@ -278,6 +297,7 @@ export function createGameSdkHttpClientRuntime<
   reconciliationInterval = 45_000,
   webSocketFactory,
   fetcher = fetch,
+  observeServerDate,
   onRoomReadTelemetry,
   onCommandTiming,
 }: GameSdkHttpClientRuntimeOptions): GameSdkHttpClientRuntime<TCreateInput, TCommand, TRoomView> {
@@ -286,6 +306,17 @@ export function createGameSdkHttpClientRuntime<
   if (!/^[a-z][a-z0-9-]*$/.test(gameId)) {
     throw new Error("Game SDK gameId is invalid.");
   }
+  const requestRuntimeJson = (
+    input: RequestInfo | URL,
+    init: RequestInit,
+    fallbackError: string,
+  ) => requestJson(
+    fetcher,
+    input,
+    init,
+    fallbackError,
+    observeServerDate,
+  );
 
   const readRoomWithSource = async (
     code: string,
@@ -294,11 +325,13 @@ export function createGameSdkHttpClientRuntime<
     const operationId = createCommandId();
     const startedAt = Date.now();
     try {
+      const requestedAt = Date.now();
       const response = await fetcher(roomUrl(endpoint, code), {
         method: "GET",
         cache: "no-store",
         credentials: "same-origin",
       });
+      observeServerDate?.(response.headers.get("date"), requestedAt, Date.now());
       const payload = await readPayload(response);
       if (response.status === 404) {
         emitRoomReadTelemetry(onRoomReadTelemetry, {
@@ -358,8 +391,7 @@ export function createGameSdkHttpClientRuntime<
     async createRoom(input) {
       const requestId = input.requestId?.trim() || createCommandId();
       input.requestId = requestId;
-      const request = () => requestJson(
-        fetcher,
+      const request = () => requestRuntimeJson(
         endpoint,
         {
           method: "POST",
@@ -394,8 +426,7 @@ export function createGameSdkHttpClientRuntime<
       const operationId = createCommandId();
       const startedAt = Date.now();
       try {
-        const payload = await requestJson(
-          fetcher,
+        const payload = await requestRuntimeJson(
           queryUrl(endpoint, {
             code,
             debugViewer: String(viewer),
@@ -441,8 +472,7 @@ export function createGameSdkHttpClientRuntime<
       const operationId = createCommandId();
       const startedAt = Date.now();
       try {
-        const payload = await requestJson(
-          fetcher,
+        const payload = await requestRuntimeJson(
           queryUrl(endpoint, { active: "1" }),
           { method: "GET" },
           "GAME_SDK_ACTIVE_ROOM_READ_FAILED",
@@ -498,8 +528,7 @@ export function createGameSdkHttpClientRuntime<
       try {
         const query: Record<string, string> = {};
         if (cursor) query.cursor = cursor;
-        const payload = await requestJson(
-          fetcher,
+        const payload = await requestRuntimeJson(
           queryUrl(endpoint, query),
           { method: "GET" },
           "GAME_SDK_ROOM_LIST_FAILED",
@@ -541,6 +570,7 @@ export function createGameSdkHttpClientRuntime<
       const commandId = envelope.commandId?.trim() || createCommandId();
       envelope.commandId = commandId;
       const request = async () => {
+        const requestedAt = Date.now();
         const response = await fetcher(endpoint, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -554,6 +584,7 @@ export function createGameSdkHttpClientRuntime<
           cache: "no-store",
           credentials: "same-origin",
         });
+        observeServerDate?.(response.headers.get("date"), requestedAt, Date.now());
         const payload = await readPayload(response);
         if (!response.ok) {
           throw new GameSdkHttpClientRuntimeError(
@@ -625,8 +656,7 @@ export function createGameSdkHttpClientRuntime<
     },
 
     async dissolveRoom(code) {
-      const payload = await requestJson(
-        fetcher,
+      const payload = await requestRuntimeJson(
         roomUrl(endpoint, code),
         { method: "DELETE" },
         "GAME_SDK_ROOM_DISSOLVE_FAILED",
@@ -635,8 +665,7 @@ export function createGameSdkHttpClientRuntime<
     },
 
     async dissolveHostedRooms() {
-      const payload = await requestJson(
-        fetcher,
+      const payload = await requestRuntimeJson(
         queryUrl(endpoint, { hosted: "1" }),
         { method: "DELETE" },
         "GAME_SDK_HOSTED_ROOMS_DISSOLVE_FAILED",

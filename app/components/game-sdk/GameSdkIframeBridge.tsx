@@ -14,6 +14,7 @@ import {
   GameSdkHttpClientRuntimeError,
 } from "@game-fields/game-sdk/client-runtime";
 import { gameTopBannerActionClass } from "@/app/components/GameTopMenu";
+import { subscribeServerClock, synchronizedNow } from "@/lib/server-clock";
 import { GameSdkIframe } from "./GameSdkIframe";
 import type {
   CommonView,
@@ -213,11 +214,16 @@ const GameSdkTimerCountdown = memo(function GameSdkTimerCountdown({
   pending,
   onRecoverTimeout,
 }: CountdownProps) {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => synchronizedNow());
 
   useEffect(() => {
-    const interval = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(interval);
+    const update = () => setNow(synchronizedNow());
+    const interval = window.setInterval(update, 250);
+    const unsubscribeClock = subscribeServerClock(update);
+    return () => {
+      window.clearInterval(interval);
+      unsubscribeClock();
+    };
   }, [deadlineAt]);
 
   const remainingSeconds = deadlineAt === null

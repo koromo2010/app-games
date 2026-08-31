@@ -15,6 +15,7 @@ import type {
   GameSdkViewPermissions,
   GameSdkViewer,
 } from "./index.js";
+
 import type {
   GameSdkPlatformResources,
   GameSdkResourceContext,
@@ -32,6 +33,22 @@ import {
   recoverGameSdkPlayerTimeout,
   type GameSdkPlayerTimeoutState,
 } from "./modules/timeout.js";
+
+export class GameSdkTimerNotExpiredError extends Error {
+  readonly code = "TIMER_NOT_EXPIRED";
+  readonly retryAfterMs: number;
+  readonly serverDeadlineAt: number;
+
+  constructor(serverDeadlineAt: number, now: number) {
+    super("TIMER_NOT_EXPIRED");
+    this.name = "GameSdkTimerNotExpiredError";
+    this.serverDeadlineAt = serverDeadlineAt;
+    this.retryAfterMs = Math.max(
+      0,
+      Math.min(60_000, Math.ceil(serverDeadlineAt - now)),
+    );
+  }
+}
 
 export type GameSdkRoomLifecycleResult<TRoom> =
   | { handled: false }
@@ -70,6 +87,7 @@ export type GameSdkOnlineRoomTimerView = Omit<
   GameSdkOnlineRoomTimer,
   "ownerPlayerId"
 > & {
+  graceMs: number;
   ownerSeat?: number | null;
 };
 
@@ -821,9 +839,15 @@ export function createGameSdkOnlineRoomModule<
             room.phase === "lobby"
             || room.phase === "result"
             || room.timer.deadlineAt === null
-            || context.now < room.timer.deadlineAt + graceMs
           ) {
             throw new Error("TIMER_NOT_EXPIRED");
+          }
+          const serverDeadlineAt = room.timer.deadlineAt + graceMs;
+          if (context.now < serverDeadlineAt) {
+            throw new GameSdkTimerNotExpiredError(
+              serverDeadlineAt,
+              context.now,
+            );
           }
         } else if (room.phase === "lobby" || room.phase === "result") {
           throw new Error("DEBUG_PROGRESS_PHASE_REQUIRED");
@@ -1146,6 +1170,10 @@ export function createGameSdkOnlineRoomModule<
               startedAt: room.timer.startedAt,
               deadlineAt: room.timer.deadlineAt,
               turnSequence: room.timer.turnSequence,
+              graceMs: Math.max(
+                0,
+                Math.min(30_000, Math.floor(appSet.timer?.graceMs ?? 1_500)),
+              ),
               ...(room.timer.ownerPlayerId === undefined ? {} : {
                 ownerSeat: room.timer.ownerPlayerId === null
                   ? null
