@@ -25,7 +25,11 @@ import {
 } from "../apps/sdk-portal/lib/production-private-workspace-import-schema.ts";
 import { performProductionPrivateWorkspaceImportTotpStepUp } from "../lib/production-private-workspace-import-step-up-client.ts";
 import { createStoredZip } from "../apps/sdk-portal/lib/stored-zip.ts";
-import { verifyProductionPrivateWorkspaceImportFileAgainstSpec } from "../lib/production-private-workspace-import-client.ts";
+import {
+  diagnoseProductionPrivateWorkspaceImportTargetState,
+  parseProductionPrivateWorkspaceImportTargetState,
+  verifyProductionPrivateWorkspaceImportFileAgainstSpec,
+} from "../lib/production-private-workspace-import-client.ts";
 import { productionPrivateWorkspaceImportPageMode } from "../lib/production-private-workspace-import-page-access.ts";
 
 const operationDevA = "5ba6f1b1-eed4-49dd-8a26-9c9bd8969519";
@@ -234,6 +238,40 @@ test("target state accepts only deleted, non-public, exact-A3 and source-absent 
   }
 });
 
+test("target-state diagnostics preserve the one read response and classify every secret-free mismatch", () => {
+  const readyResponse = projectProductionPrivateWorkspaceImportTargetState("moi-lab2", before());
+  const parsedReady = parseProductionPrivateWorkspaceImportTargetState(readyResponse, "moi-lab2");
+  assert.ok(parsedReady);
+  assert.deepEqual(diagnoseProductionPrivateWorkspaceImportTargetState(
+    parsedReady,
+    parsedReady.creatorIdentitySha256!,
+  ), []);
+
+  const blockedResponse = projectProductionPrivateWorkspaceImportTargetState("moi-lab2", {
+    ...before(),
+    recoveryIdentityExact: false,
+    recoveryQuarantineGameRows: 1,
+    targetWorkspaceRows: 1,
+  });
+  const parsedBlocked = parseProductionPrivateWorkspaceImportTargetState(blockedResponse, "moi-lab2");
+  assert.ok(parsedBlocked);
+  const failures = diagnoseProductionPrivateWorkspaceImportTargetState(
+    parsedBlocked,
+    "0".repeat(64),
+  );
+  assert.deepEqual(failures.map(({ code }) => code), [
+    "TARGET_CREATOR_IDENTITY_MISMATCH",
+    "TARGET_COUNT_RECOVERY_QUARANTINE_GAME_ROWS_MISMATCH",
+    "TARGET_COUNT_WORKSPACE_ROWS_MISMATCH",
+    "A3_RECOVERY_IDENTITY_MISMATCH",
+  ]);
+  assert.equal(failures.every(({ observed }) => typeof observed !== "object"), true);
+
+  const malformed = structuredClone(readyResponse) as Record<string, unknown>;
+  delete (malformed.integrity as Record<string, unknown>).publicStateTokenValid;
+  assert.equal(parseProductionPrivateWorkspaceImportTargetState(malformed, "moi-lab2"), null);
+});
+
 test("the Production operation ID is deterministic and never reuses consumed Development IDs", () => {
   const fixture = syntheticBundle();
   const bundle = validateProductionPrivateWorkspaceBundle({ target: "moi-lab2", archive: fixture.archive, specs: fixture.specs });
@@ -336,6 +374,8 @@ test("preparation UI has no upload POST controls and execution has single plan/e
   assert.match(panel, /planUsed\.current = true/);
   assert.match(panel, /executeUsed\.current = true/);
   assert.match(panel, /execute POSTは再送しません/);
+  assert.match(panel, /data-production-private-import-target-failures/);
+  assert.match(panel, /setTargetState\(parsed\)/);
   assert.equal((panel.match(/method: "POST"/g) ?? []).length, 2);
   assert.match(panel, /method: "GET"/);
 });
