@@ -19,6 +19,7 @@ import {
   productionPrivateWorkspaceImportRecoveryIdentity,
   productionPrivateWorkspaceImportTargetSpec,
 } from "../apps/sdk-portal/lib/production-private-workspace-import-public-contract.ts";
+import { resolveSdkProductionRuntimeIdentity } from "../apps/sdk-portal/lib/production-private-workspace-runtime-identity.ts";
 import {
   productionPrivateWorkspaceImportObjectNames,
   productionPrivateWorkspaceImportSchemaStatements,
@@ -191,6 +192,75 @@ test("Production target and A3 recovery identities are exact and immutable", () 
   assert.equal(productionPrivateWorkspaceImportTargetSpec.bundleBytes, 127_345);
   assert.equal(productionPrivateWorkspaceImportRecoveryIdentity.operationId, "fa5eca14-a961-4bd1-9e68-78a609895971");
   assert.equal(productionPrivateWorkspaceImportRecoveryIdentity.terminalReceipt, "f449b3b2114ef863ea290d26c123a40ac3038e6e9861a3a576cb5bc2b9d35162");
+});
+
+test("SDK Production runtime identity is config-driven, source-bound, and independent of Platform APP_ENV", () => {
+  const sourceCommit = "a".repeat(40);
+  assert.deepEqual(resolveSdkProductionRuntimeIdentity({
+    APP_ENV: "sdk",
+    VERCEL_ENV: "production",
+    VERCEL_PROJECT_NAME: "app-games-sdk",
+    VERCEL_GIT_COMMIT_REF: "main",
+    VERCEL_GIT_COMMIT_SHA: sourceCommit,
+  }), { environment: "production", sourceCommit });
+
+  for (const missing of [
+    "VERCEL_ENV",
+    "VERCEL_PROJECT_NAME",
+    "VERCEL_GIT_COMMIT_REF",
+    "VERCEL_GIT_COMMIT_SHA",
+  ] as const) {
+    const environment: NodeJS.ProcessEnv = {
+      VERCEL_ENV: "production",
+      VERCEL_PROJECT_NAME: "app-games-sdk",
+      VERCEL_GIT_COMMIT_REF: "main",
+      VERCEL_GIT_COMMIT_SHA: sourceCommit,
+    };
+    delete environment[missing];
+    assert.equal(resolveSdkProductionRuntimeIdentity(environment), null, missing);
+  }
+
+  for (const mismatch of [
+    { VERCEL_ENV: "preview" },
+    { VERCEL_PROJECT_NAME: "app-games-sdk-dev" },
+    { VERCEL_GIT_COMMIT_REF: "develop" },
+    { VERCEL_GIT_COMMIT_SHA: "not-a-source-commit" },
+    { VERCEL_GIT_COMMIT_SHA: "0".repeat(40) },
+    { VERCEL_GIT_COMMIT_SHA: "0".repeat(64) },
+  ]) {
+    assert.equal(resolveSdkProductionRuntimeIdentity({
+      VERCEL_ENV: "production",
+      VERCEL_PROJECT_NAME: "app-games-sdk",
+      VERCEL_GIT_COMMIT_REF: "main",
+      VERCEL_GIT_COMMIT_SHA: sourceCommit,
+      ...mismatch,
+    }), null);
+  }
+});
+
+test("target-state, plan, execute, and status use one fail-closed secret-free SDK runtime resolver", () => {
+  const routePaths = [
+    "apps/sdk-portal/app/api/internal/recovery/production-private-workspace-import/[target]/target-state/route.ts",
+    "apps/sdk-portal/app/api/internal/recovery/production-private-workspace-import/[target]/plan/route.ts",
+    "apps/sdk-portal/app/api/internal/recovery/production-private-workspace-import/[target]/execute/route.ts",
+    "apps/sdk-portal/app/api/internal/recovery/production-private-workspace-import/[target]/status/[operationId]/route.ts",
+  ];
+  for (const routePath of routePaths) {
+    const source = readFileSync(routePath, "utf8");
+    assert.equal((source.match(/resolveSdkProductionRuntimeIdentity\(\)/g) ?? []).length, 1, routePath);
+    assert.doesNotMatch(source, /resolveSdkProductionRuntimeIdentity\([^)]/);
+    assert.doesNotMatch(source, /process\.env\.APP_ENV|function productionRuntime/);
+    assert.match(source, /Response\.json\(\{ error: "PRODUCTION_PRIVATE_IMPORT_INPUT_INVALID" \}, \{ status: 400, headers \}\)/);
+    assert.doesNotMatch(source, /sourceCommit[^\n]*(?:Response|json)|VERCEL_GIT_COMMIT_SHA[^\n]*(?:Response|json)/);
+  }
+
+  const resolver = readFileSync(
+    "apps/sdk-portal/lib/production-private-workspace-runtime-identity.ts",
+    "utf8",
+  );
+  assert.match(resolver, /main-promotion-projects\.json/);
+  assert.match(resolver, /role === "production-sdk-portal"/);
+  assert.doesNotMatch(resolver, /(?:process\.env|environment)\.APP_ENV|https:\/\/sdk\.game-fields\.com|[0-9a-f]{40}/);
 });
 
 test("browser verification accepts the canonical UTF-8 stored ZIP dialect", async () => {
