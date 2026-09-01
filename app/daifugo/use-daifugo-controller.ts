@@ -177,7 +177,7 @@ export function useDaifugoController() {
     finally { setSaving(false); }
   };
 
-  const listRooms = async () => { try { setChoices(await daifugoRoomApi.fetchJoinableRooms()); setShowChoices(true); } catch (caught) { setError(apiMessage(caught, d.listFailed, d)); } };
+  const listRooms = async () => { setShowChoices(false); try { setChoices(await daifugoRoomApi.fetchJoinableRooms()); setShowChoices(true); } catch (caught) { setError(apiMessage(caught, d.listFailed, d)); } };
   const leaveRoom = async () => { if (!room) return; const saved = await runAction({ type: "leave-room", actorId: playerId }); if (saved) { setRoom(null); localStorage.removeItem(lastRoomKey); } };
   const dissolveRoom = async () => { if (!room || !confirm(d.confirmDissolve)) return; try { await daifugoRoomApi.remove({ code: room.code, actorId: playerId }); localStorage.removeItem(lastRoomKey); if (resultReturnGate.markRoomDissolved()) { setError(d.dissolvedResult); return; } setRoom(null); } catch (caught) { setError(apiMessage(caught, d.dissolveFailed, d)); } };
   const play = () => { if (!game) return; const message = daifugoPlayError(game, controlledPlayerId, selectedCardIds); if (message) { setError(localizeDaifugoPlayError(message, locale)); return; } void runAction({ type: "play-cards", actorId: playerId, playerId: controlledPlayerId === playerId ? undefined : controlledPlayerId, cardIds: selectedCardIds }); };

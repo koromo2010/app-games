@@ -316,7 +316,7 @@ export function useGameSdkFrameController(
     onFailure: handleRuntimeError,
   });
 
-  const joinRoomByCode = useCallback((code: string) => commandRunner.run(async () => {
+  const joinRoomByCode = useCallback((code: string, roomGenerationId?: string) => commandRunner.run(async () => {
     const target = await runtime.readRoom(code);
     if (!target) throw new Error("ROOM_NOT_FOUND");
     if (!acceptPackageRevision(target)) {
@@ -324,6 +324,7 @@ export function useGameSdkFrameController(
     }
     return (await runtime.sendCommand(target.code, {
       expectedRevision: target.revision,
+      expectedRoomInstanceId: roomGenerationId,
       command: { type: "room/join" },
     })).room;
   }), [acceptPackageRevision, commandRunner, runtime]);
@@ -476,6 +477,8 @@ export function useGameSdkFrameController(
       joinCode,
       setJoinCode,
       rooms: lifecycle.rooms,
+      isDiscoveringRooms: lifecycle.isDiscoveringRooms,
+      hasCompletedRoomDiscovery: lifecycle.hasCompletedRoomDiscovery,
       onCreateRoom,
       onJoinRoomByCode: joinRoomByCode,
       onRefreshRooms: () => void refreshRooms(),

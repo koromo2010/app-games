@@ -239,6 +239,7 @@ export function useKotobaSenpukuController() {
   };
 
   const listRooms = async () => {
+    setShowChoices(false);
     try {
       const rooms = await kotobaSenpukuRoomApi.fetchJoinableRooms();
       setChoices(rooms);

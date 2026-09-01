@@ -12,7 +12,7 @@ import {
   multiplayerRoomExpiryArgs,
   multiplayerRoomTtlSeconds,
 } from "./multiplayer-room-lifecycle.ts";
-import { loadIndexedOnlineRoomPage } from "./online-room-list.ts";
+import { loadFilteredIndexedOnlineRoomPage } from "./online-room-list.ts";
 import {
   compareAndSetOnlineRoom,
   createIndexedOnlineRoom,
@@ -433,7 +433,7 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
     },
 
     async listRooms(cursor, maximumPlayers, packageRevision) {
-      const page = await loadIndexedOnlineRoomPage(cursor, {
+      const page = await loadFilteredIndexedOnlineRoomPage(cursor, {
         indexKey,
         roomKey,
         parseRoom(raw) {
@@ -451,29 +451,31 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
           }
         },
         loadRoom: store.load,
-      });
-      return {
-        rooms: page.rooms
-          .filter((record): record is GameFieldsPlatformRoomRecord<TRoom> => Boolean(
-            record
-            && !isMultiplayerRoomExpired(record.updatedAt)
-            && record.phase === "lobby"
-            && (
-              !packageRevision
-              || record.runtimeContract.packageRevision === packageRevision
+        selectRoom(record) {
+          if (
+            isMultiplayerRoomExpired(record.updatedAt)
+            || record.phase !== "lobby"
+            || (
+              packageRevision
+              && record.runtimeContract.packageRevision !== packageRevision
             )
-            && roomPlayerIds(record).length < maximumPlayers,
-          ))
-          .map((record) => ({
+            || roomPlayerIds(record).length >= maximumPlayers
+          ) return null;
+          return {
             code: record.code,
+            roomGenerationId: record.creationRequestId,
             phase: record.phase,
             revision: record.revision,
             packageRevision: record.runtimeContract.packageRevision,
             playerCount: roomPlayerIds(record).length,
             maximumPlayers,
             updatedAt: record.updatedAt,
-          }))
-          .sort((left, right) => right.updatedAt - left.updatedAt),
+          };
+        },
+        identity: (choice) => `${gameId}:${choice.roomGenerationId}`,
+      });
+      return {
+        rooms: page.rooms.sort((left, right) => right.updatedAt - left.updatedAt),
         nextCursor: page.nextCursor,
       };
     },

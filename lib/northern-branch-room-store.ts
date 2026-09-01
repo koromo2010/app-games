@@ -237,8 +237,11 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
   return room;
 }
 
-export async function listJoinableNorthernRooms(cursor?: unknown) {
-  return roomRuntime.list(cursor);
+export async function listJoinableNorthernRooms(
+  cursor?: unknown,
+  includeChoice?: Parameters<typeof roomRuntime.list>[1],
+) {
+  return roomRuntime.list(cursor, includeChoice);
 }
 
 export async function deleteStoredNorthernRoom(code: string, actorId: string) {

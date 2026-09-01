@@ -232,6 +232,7 @@ export function useCodeInterceptController() {
 
   const listRooms = async () => {
     setError("");
+    setShowChoices(false);
     try { setChoices(await codeInterceptRoomApi.fetchJoinableRooms()); setShowChoices(true); }
     catch (caught) { setError(apiMessage(caught, "部屋一覧を取得できませんでした。")); }
   };

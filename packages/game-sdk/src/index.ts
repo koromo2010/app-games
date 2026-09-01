@@ -496,6 +496,8 @@ export type GameSdkCommandResult<TRoomView> = {
 
 export type GameSdkRoomListItem = {
   code: string;
+  /** Immutable Room-generation identity used for dedupe and join revalidation. */
+  roomGenerationId: string;
   phase: string;
   revision: number;
   packageRevision?: string;
@@ -542,7 +544,10 @@ export type GameSdkClientRuntime<TCreateInput, TCommand extends { type: string }
   }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(code: string): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   readActiveRoom(): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
-  listRooms(cursor?: string | null): Promise<GameSdkRoomListPage>;
+  listRooms(
+    cursor?: string | null,
+    options?: { signal?: AbortSignal },
+  ): Promise<GameSdkRoomListPage>;
   sendCommand(
     code: string,
     envelope: GameSdkCommandEnvelope<TCommand>,

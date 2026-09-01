@@ -1,10 +1,22 @@
 import { fetchConditionalJson } from "./conditional-json-client.ts";
+import {
+  consumeOnlineRoomDiscovery,
+  currentOnlineRoomDiscoveryEpoch,
+  OnlineRoomDiscoveryError,
+  trackOnlineRoomDiscovery,
+  type OnlineRoomDiscoveryItem,
+  type OnlineRoomDiscoveryOptions,
+  type OnlineRoomDiscoveryPage,
+} from "./online-room-discovery.ts";
 import { observeServerDate } from "./server-clock.ts";
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 type RoomResponse<Room> = { room?: Room | null };
-type RoomListResponse<RoomChoice> = { rooms?: RoomChoice[] };
+type RoomListResponse<RoomChoice> = {
+  rooms?: RoomChoice[];
+  nextCursor?: string | null;
+};
 
 export class OnlineRoomApiError extends Error {
   readonly code: string;
@@ -72,6 +84,31 @@ export function createOnlineRoomApiClient<Room, RoomChoice>({
   normalizeRoom = (room) => room,
 }: OnlineRoomApiClientOptions<Room>) {
   const normalizeOptionalRoom = (room: Room | null | undefined) => room ? normalizeRoom(room) : null;
+  let discoveryController: AbortController | null = null;
+  const discoveredRoomGenerations = new Map<string, string>();
+  const ambiguousDiscoveredCodes = new Set<string>();
+  let discoveryEpoch = -1;
+
+  const fetchJoinableRoomPage = async (
+    cursor: string | null = null,
+    signal?: AbortSignal,
+  ): Promise<OnlineRoomDiscoveryPage<RoomChoice & OnlineRoomDiscoveryItem>> => {
+    const requestedAt = Date.now();
+    const response = await fetcher(
+      queryUrl(endpoint, { cursor: cursor ?? undefined }),
+      { cache: "no-store", signal },
+    );
+    observeServerDate(response.headers.get("date"), requestedAt, Date.now());
+    const payload = await response.json().catch(() => null) as RoomListResponse<RoomChoice> | null;
+    if (!response.ok) throw new OnlineRoomApiError("ROOM_LIST_FAILED", response.status, payload);
+    if (!payload || !Array.isArray(payload.rooms) || !("nextCursor" in payload)) {
+      throw new OnlineRoomDiscoveryError("ROOM_LIST_RESPONSE_INVALID");
+    }
+    return {
+      rooms: payload.rooms as Array<RoomChoice & OnlineRoomDiscoveryItem>,
+      nextCursor: payload.nextCursor ?? null,
+    };
+  };
 
   return {
     async fetchRoom(code: string, playerId?: string) {
@@ -89,10 +126,40 @@ export function createOnlineRoomApiClient<Room, RoomChoice>({
       return normalizeOptionalRoom(result.data?.room);
     },
 
-    async fetchJoinableRooms() {
-      const result = await fetchConditionalJson<RoomListResponse<RoomChoice>>(endpoint, fetcher);
-      if (!result.ok) throw new OnlineRoomApiError("ROOM_LIST_FAILED", result.status, result.data);
-      return Array.isArray(result.data?.rooms) ? result.data.rooms : [];
+    fetchJoinableRoomPage,
+
+    async fetchJoinableRooms(options: OnlineRoomDiscoveryOptions = {}) {
+      discoveryController?.abort(new DOMException("Superseded", "AbortError"));
+      const controller = new AbortController();
+      discoveryController = controller;
+      const stopTracking = trackOnlineRoomDiscovery(controller);
+      const abortFromCaller = () => controller.abort(options.signal?.reason);
+      if (options.signal?.aborted) abortFromCaller();
+      else options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+      try {
+        const rooms = await consumeOnlineRoomDiscovery(
+          endpoint,
+          fetchJoinableRoomPage,
+          { ...options, signal: controller.signal },
+        );
+        discoveredRoomGenerations.clear();
+        ambiguousDiscoveredCodes.clear();
+        for (const room of rooms) {
+          const currentGeneration = discoveredRoomGenerations.get(room.code);
+          if (currentGeneration && currentGeneration !== room.roomGenerationId) {
+            discoveredRoomGenerations.delete(room.code);
+            ambiguousDiscoveredCodes.add(room.code);
+          } else if (!ambiguousDiscoveredCodes.has(room.code)) {
+            discoveredRoomGenerations.set(room.code, room.roomGenerationId);
+          }
+        }
+        discoveryEpoch = currentOnlineRoomDiscoveryEpoch();
+        return rooms;
+      } finally {
+        stopTracking();
+        options.signal?.removeEventListener("abort", abortFromCaller);
+        if (discoveryController === controller) discoveryController = null;
+      }
     },
 
     async post<TPayload, TResult>(payload: TPayload, errorCode = "ROOM_SAVE_FAILED") {
@@ -105,12 +172,37 @@ export function createOnlineRoomApiClient<Room, RoomChoice>({
       return responseJson<TResult>(response, errorCode, requestedAt);
     },
 
-    async patch<TAction>(code: string, action: TAction) {
+    async patch<TAction>(
+      code: string,
+      action: TAction,
+      options: { expectedRoomInstanceId?: string } = {},
+    ) {
       const requestedAt = Date.now();
+      const actionType = action && typeof action === "object"
+        ? (action as { type?: unknown }).type
+        : null;
+      if (
+        actionType === "join-room"
+        && options.expectedRoomInstanceId === undefined
+        && discoveryEpoch === currentOnlineRoomDiscoveryEpoch()
+        && ambiguousDiscoveredCodes.has(code)
+      ) {
+        throw new OnlineRoomDiscoveryError("ROOM_LIST_IDENTITY_AMBIGUOUS");
+      }
+      const expectedRoomInstanceId = options.expectedRoomInstanceId
+        ?? (
+          actionType === "join-room" && discoveryEpoch === currentOnlineRoomDiscoveryEpoch()
+            ? discoveredRoomGenerations.get(code)
+            : undefined
+        );
       const response = await fetcher(endpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, action }),
+        body: JSON.stringify({
+          code,
+          action,
+          ...(expectedRoomInstanceId ? { expectedRoomInstanceId } : {}),
+        }),
       });
       const data = await responseJson<{ room?: Room; error?: string }>(response, "ROOM_ACTION_FAILED", requestedAt);
       if (!data.room) throw new OnlineRoomApiError(data.error || "ROOM_ACTION_FAILED", response.status, data);

@@ -52,9 +52,16 @@ export type GameSdkFrameViewProps = {
   // lounge (no room yet)
   joinCode: string;
   setJoinCode: (value: string) => void;
-  rooms: Array<{ code: string; playerCount: number; maximumPlayers: number }>;
+  rooms: Array<{
+    code: string;
+    roomGenerationId: string;
+    playerCount: number;
+    maximumPlayers: number;
+  }>;
+  isDiscoveringRooms: boolean;
+  hasCompletedRoomDiscovery: boolean;
   onCreateRoom: () => void;
-  onJoinRoomByCode: (code: string) => void;
+  onJoinRoomByCode: (code: string, roomGenerationId?: string) => void;
   onRefreshRooms: () => void;
 
   // room-exists view
@@ -133,6 +140,8 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
     joinCode,
     setJoinCode,
     rooms,
+    isDiscoveringRooms,
+    hasCompletedRoomDiscovery,
     onCreateRoom,
     onJoinRoomByCode,
     onRefreshRooms,
@@ -316,12 +325,14 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
               <h2 className="text-xl font-black">募集中の部屋</h2>
               <button type="button" className={secondary} onClick={onRefreshRooms}>更新</button>
             </div>
-            {rooms.length === 0 ? (
+            {isDiscoveringRooms ? (
+              <p className="mt-4 text-sm text-slate-500">参加できる部屋を確認しています。</p>
+            ) : hasCompletedRoomDiscovery && rooms.length === 0 ? (
               <p className="mt-4 text-sm text-slate-500">現在、参加できる部屋はありません。</p>
-            ) : (
+            ) : hasCompletedRoomDiscovery ? (
               <ul className="mt-4 space-y-2">
                 {rooms.map((candidate) => (
-                  <li key={candidate.code} className="flex items-center justify-between gap-3 rounded-lg bg-slate-100 p-3">
+                  <li key={candidate.roomGenerationId} className="flex items-center justify-between gap-3 rounded-lg bg-slate-100 p-3">
                     <div>
                       <strong className="font-mono">{candidate.code}</strong>
                       <span className="ml-3 text-sm text-slate-600">
@@ -332,13 +343,15 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
                       type="button"
                       className={secondary}
                       disabled={pending}
-                      onClick={() => onJoinRoomByCode(candidate.code)}
+                      onClick={() => onJoinRoomByCode(candidate.code, candidate.roomGenerationId)}
                     >
                       参加
                     </button>
                   </li>
                 ))}
               </ul>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">部屋一覧を確定できませんでした。更新してください。</p>
             )}
           </div>
         </section>

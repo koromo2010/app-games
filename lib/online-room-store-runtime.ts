@@ -7,7 +7,10 @@ import {
   dissolveHostedIndexedOnlineRooms,
   dissolveIndexedOnlineRoom,
 } from "./online-room-dissolution.ts";
-import { loadIndexedOnlineRoomPage } from "./online-room-list.ts";
+import {
+  loadFilteredIndexedOnlineRoomPage,
+  type OnlineRoomListIdentity,
+} from "./online-room-list.ts";
 import {
   createIndexedOnlineRoom,
   mutateOnlineRoomWithRetry,
@@ -105,7 +108,10 @@ export type PlatformOnlineRoomStoreRuntime<
     options?: MutateOptions<TRoom>,
   ): Promise<TRoom>;
   listAll(): Promise<TRoom[]>;
-  list(cursor?: unknown): Promise<{ rooms: TChoice[]; nextCursor: string | null }>;
+  list(
+    cursor?: unknown,
+    includeChoice?: (choice: TChoice & OnlineRoomListIdentity) => boolean,
+  ): Promise<{ rooms: Array<TChoice & OnlineRoomListIdentity>; nextCursor: string | null }>;
   deleteStorage(roomCode: string, playerIds: Iterable<string>): Promise<void>;
   dissolve(code: string, actorId: string): Promise<void>;
   dissolveHosted(actorId: string): Promise<number>;
@@ -321,21 +327,25 @@ export function createPlatformOnlineRoomStoreRuntime<
         return availableRooms;
       }, []);
     },
-    async list(cursor) {
-      const page = await loadIndexedOnlineRoomPage(cursor, {
+    async list(cursor, includeChoice = () => true) {
+      const page = await loadFilteredIndexedOnlineRoomPage(cursor, {
         indexKey: roomIndexKey,
         roomKey,
         parseRoom: parse,
         loadRoom: load,
+        selectRoom(room) {
+          const roomGenerationId = normalizeRoomInstanceId(room.roomInstanceId);
+          if (
+            !roomGenerationId
+            || isMultiplayerRoomExpired(room.updatedAt)
+            || !isJoinable(room)
+          ) return null;
+          const choice = { ...toChoice(room), roomGenerationId };
+          return includeChoice(choice) ? choice : null;
+        },
+        identity: (choice) => `${gameId}:${choice.roomGenerationId}`,
       });
-      const rooms = page.rooms
-        .filter((room): room is TRoom => Boolean(
-          room
-          && !isMultiplayerRoomExpired(room.updatedAt)
-          && isJoinable(room)
-        ))
-        .map(toChoice)
-        .sort((left, right) => right.updatedAt - left.updatedAt);
+      const rooms = page.rooms.sort((left, right) => right.updatedAt - left.updatedAt);
       return { rooms, nextCursor: page.nextCursor };
     },
     deleteStorage,

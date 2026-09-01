@@ -241,8 +241,11 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
   return room;
 }
 
-export async function listJoinableKotobaSenpukuRooms(cursor?: unknown) {
-  return roomRuntime.list(cursor);
+export async function listJoinableKotobaSenpukuRooms(
+  cursor?: unknown,
+  includeChoice?: Parameters<typeof roomRuntime.list>[1],
+) {
+  return roomRuntime.list(cursor, includeChoice);
 }
 
 export async function deleteStoredKotobaSenpukuRoom(code: string, actorId: string) {

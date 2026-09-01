@@ -1,6 +1,10 @@
 export const onlineRoomCodePattern = /^[A-Z0-9]{4}$/;
 export const onlineRoomPassphraseMaximumLength = 40;
 export const onlineRoomListPageSize = 24;
+/** One logical page may inspect at most this many Redis SSCAN pages. */
+export const onlineRoomListMaximumScanPages = 8;
+/** A client may follow at most this many nonterminal logical pages per refresh. */
+export const onlineRoomListMaximumClientRequests = 8;
 export const onlineRoomPlayerLimits = {
   wordwolf: 20,
   tahoiya: 8,

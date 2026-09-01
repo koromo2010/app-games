@@ -339,8 +339,11 @@ export async function listStoredWordWolfRooms() {
   return roomRuntime.listAll();
 }
 
-export async function listStoredJoinableWordWolfRooms(cursor?: unknown) {
-  return roomRuntime.list(cursor);
+export async function listStoredJoinableWordWolfRooms(
+  cursor?: unknown,
+  includeChoice?: Parameters<typeof roomRuntime.list>[1],
+) {
+  return roomRuntime.list(cursor, includeChoice);
 }
 
 export async function deleteStoredHostedWordWolfRooms(hostId: string) {

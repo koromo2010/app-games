@@ -50,6 +50,7 @@ export function useWordWolfRoomLifecycle(args: Args) {
 
   const showJoinChoices = async () => {
     if (!beginLifecycleAction()) return;
+    args.setIsJoinListOpen(false);
     try {
       const rooms = await listJoinableRoomsFromStore();
       args.setJoinableRooms(rooms); args.setIsJoinListOpen(true);

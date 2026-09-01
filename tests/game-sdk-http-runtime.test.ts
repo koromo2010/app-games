@@ -171,6 +171,7 @@ function memoryRoomStore(): GameSdkPlatformRoomStore<SdkCountUpRoom> {
           ))
           .map((record) => ({
             code: record.code,
+            roomGenerationId: record.creationRequestId,
             phase: record.phase,
             revision: record.revision,
             packageRevision: record.runtimeContract.packageRevision,
@@ -334,6 +335,7 @@ test("SDK HTTP Client Runtimeはactorを送らず認証adapterと永続Runtime�
   });
 
   let room = await runtime.createRoom({
+    requestId: "request-http-runtime",
     roomCode: "race",
     create: {
       settings: { target: 3 },
@@ -350,6 +352,7 @@ test("SDK HTTP Client Runtimeはactorを送らず認証adapterと永続Runtime�
   assert.deepEqual(await runtime.listRooms(), {
     rooms: [{
       code: "RACE",
+      roomGenerationId: "request-http-runtime",
       phase: "lobby",
       revision: 1,
       packageRevision: "builtin:sdk-count-up-proof:sdk-2",

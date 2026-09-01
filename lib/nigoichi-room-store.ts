@@ -329,8 +329,11 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
   return room;
 }
 
-export async function listJoinableNigoichiRooms(cursor?: unknown) {
-  return roomRuntime.list(cursor);
+export async function listJoinableNigoichiRooms(
+  cursor?: unknown,
+  includeChoice?: Parameters<typeof roomRuntime.list>[1],
+) {
+  return roomRuntime.list(cursor, includeChoice);
 }
 
 export async function deleteStoredNigoichiRoom(code: string, actorId: string) {

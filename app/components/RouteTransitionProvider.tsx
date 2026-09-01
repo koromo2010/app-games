@@ -3,6 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { PageLoadingOverlay } from "@/app/components/PageLoadingOverlay";
+import { useAppLocale } from "@/app/components/AppLocaleProvider";
+import { abortAllOnlineRoomDiscoveries } from "@/lib/online-room-discovery";
 
 type RouteTransitionContextValue = {
   beginRouteTransition: () => void;
@@ -12,6 +14,7 @@ const RouteTransitionContext = createContext<RouteTransitionContextValue | null>
 
 export function RouteTransitionProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { locale } = useAppLocale();
   const sourcePathRef = useRef(pathname);
   const showTimerRef = useRef<number | null>(null);
   const [pending, setPending] = useState(false);
@@ -54,6 +57,10 @@ export function RouteTransitionProvider({ children }: { children: ReactNode }) {
   }, [clearShowTimer, pending]);
 
   useEffect(() => () => clearShowTimer(), [clearShowTimer]);
+
+  useEffect(() => () => {
+    abortAllOnlineRoomDiscoveries("Navigation, locale change, or unmount");
+  }, [locale, pathname]);
 
   const value = useMemo(() => ({ beginRouteTransition }), [beginRouteTransition]);
   return (

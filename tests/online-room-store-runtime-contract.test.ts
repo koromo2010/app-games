@@ -27,6 +27,8 @@ test("オンラインRoom Storeは共通platform runtimeへ接続する", () => 
     assert.doesNotMatch(source, /loadPlayerActiveOnlineRoom/);
     assert.doesNotMatch(source, /dissolveIndexedOnlineRoom/);
     assert.doesNotMatch(source, /loadIndexedOnlineRoomPage/);
+    assert.match(source, /includeChoice\?: Parameters<typeof roomRuntime\.list>\[1\]/);
+    assert.match(source, /roomRuntime\.list\(cursor, includeChoice\)/);
   }
 });
 
@@ -36,4 +38,18 @@ test("platform runtimeはactive-room解放と期限切れ一覧除外を所有�
   assert.match(source, /releasePlayerActiveRoom/);
   assert.match(source, /releaseMany/);
   assert.match(source, /isMultiplayerRoomExpired\(room\.updatedAt\)/);
+  assert.match(source, /loadFilteredIndexedOnlineRoomPage/);
+  assert.match(source, /roomGenerationId/);
+  assert.match(source, /includeChoice\(choice\)/);
+});
+
+test("built-inとSDK Room Storeは同じbounded logical page基盤を使う", () => {
+  const sdkSource = read("lib/game-sdk-platform-room-store.ts");
+  const helperSource = read("lib/online-room-list.ts");
+
+  assert.match(sdkSource, /loadFilteredIndexedOnlineRoomPage/);
+  assert.match(sdkSource, /roomGenerationId: record\.creationRequestId/);
+  assert.match(helperSource, /onlineRoomListMaximumScanPages/);
+  assert.match(helperSource, /ONLINE_ROOM_LIST_CURSOR_STALLED/);
+  assert.match(helperSource, /ONLINE_ROOM_LIST_CURSOR_CYCLIC/);
 });

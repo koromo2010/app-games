@@ -58,7 +58,7 @@ export function useHodoaiRoomActions(params: Params) {
     } catch (caught) { const status = caught instanceof OnlineRoomApiError ? caught.status : 0; setError(status === 409 ? "プレイ中の部屋があります。先にその部屋へ戻ってください。" : apiMessage(status, "部屋を作成できませんでした。")); }
     finally { setIsSaving(false); }
   };
-  const listRooms = async () => { try { const rooms = await hodoaiRoomApi.fetchJoinableRooms(); setChoices(rooms); setShowChoices(true); setError(rooms.length ? "" : "参加できる未開始の部屋がありません。"); } catch (caught) { setError(apiMessage(caught instanceof OnlineRoomApiError ? caught.status : 0, "部屋一覧を取得できませんでした。")); } };
+  const listRooms = async () => { setShowChoices(false); try { const rooms = await hodoaiRoomApi.fetchJoinableRooms(); setChoices(rooms); setShowChoices(true); setError(rooms.length ? "" : "参加できる未開始の部屋がありません。"); } catch (caught) { setError(apiMessage(caught instanceof OnlineRoomApiError ? caught.status : 0, "部屋一覧を取得できませんでした。")); } };
   const joinRoom = async (selectedCode = joinCode) => {
     if (!session?.id) return; const code = selectedCode.trim().toUpperCase(); if (!code) { setError("部屋コードを入力してください。"); return; }
     const player: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: Date.now(), avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };

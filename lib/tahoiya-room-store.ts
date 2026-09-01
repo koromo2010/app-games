@@ -424,8 +424,11 @@ export async function listStoredTahoiyaRooms() {
   return roomRuntime.listAll();
 }
 
-export async function listStoredJoinableTahoiyaRooms(cursor?: unknown) {
-  return roomRuntime.list(cursor);
+export async function listStoredJoinableTahoiyaRooms(
+  cursor?: unknown,
+  includeChoice?: Parameters<typeof roomRuntime.list>[1],
+) {
+  return roomRuntime.list(cursor, includeChoice);
 }
 
 export async function deleteStoredHostedTahoiyaRooms(authenticatedHostId: string) {

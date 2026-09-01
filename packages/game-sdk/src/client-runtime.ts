@@ -85,7 +85,10 @@ export type GameSdkHttpClientRuntime<
     viewer: number | "spectator",
   ): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   readActiveRoom(): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
-  listRooms(cursor?: string | null): Promise<GameSdkRoomListPage>;
+  listRooms(
+    cursor?: string | null,
+    options?: { signal?: AbortSignal },
+  ): Promise<GameSdkRoomListPage>;
   sendCommand(
     code: string,
     envelope: GameSdkCommandEnvelope<TCommand>,
@@ -201,6 +204,9 @@ function isRoomListPage(value: unknown): value is GameSdkRoomListPage {
       room
       && typeof room === "object"
       && typeof room.code === "string"
+      && typeof room.roomGenerationId === "string"
+      && room.roomGenerationId.length > 0
+      && room.roomGenerationId.length <= 128
       && typeof room.phase === "string"
       && Number.isSafeInteger(room.revision)
       && (
@@ -522,7 +528,7 @@ export function createGameSdkHttpClientRuntime<
       }
     },
 
-    async listRooms(cursor = null) {
+    async listRooms(cursor = null, options = {}) {
       const operationId = createCommandId();
       const startedAt = Date.now();
       try {
@@ -530,7 +536,7 @@ export function createGameSdkHttpClientRuntime<
         if (cursor) query.cursor = cursor;
         const payload = await requestRuntimeJson(
           queryUrl(endpoint, query),
-          { method: "GET" },
+          { method: "GET", signal: options.signal },
           "GAME_SDK_ROOM_LIST_FAILED",
         );
         if (!isRoomListPage(payload)) {

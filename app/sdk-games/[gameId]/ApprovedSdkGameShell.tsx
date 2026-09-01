@@ -8,6 +8,7 @@ import type { WordWolfSdkCommand } from "@/games/wordwolf-sdk/domain";
 import type { WordWolfSdkAppView } from "@/games/wordwolf-sdk/server-module";
 import {
   gameSdkSettingOptionValue,
+  type GameSdkRoomListItem,
   type GameSdkSettingDefinition,
   type GameSdkSettingValue,
 } from "@game-fields/game-sdk";
@@ -34,6 +35,7 @@ import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
 import { authoritativeTimerErrorDirective } from "@/lib/game-timer/retry";
 import { observeServerDate } from "@/lib/server-clock";
 import { useGameplayActionWindow } from "@/app/hooks/use-gameplay-action-window";
+import { consumeOnlineRoomDiscovery, trackOnlineRoomDiscovery } from "@/lib/online-room-discovery";
 
 type WordWolfRoomView = GameSdkOnlineRoomView<
   {
@@ -107,12 +109,11 @@ export function ApprovedSdkGameShell({
   const pendingActionRef = useRef(false);
   const pendingLobbyRoomRef = useRef<RoomSnapshot | null>(null);
   const roomRef = useRef<RoomSnapshot | null>(null);
+  const roomDiscoveryRef = useRef<AbortController | null>(null);
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
-  const [rooms, setRooms] = useState<Array<{
-    code: string;
-    playerCount: number;
-    maximumPlayers: number;
-  }>>([]);
+  const [rooms, setRooms] = useState<GameSdkRoomListItem[]>([]);
+  const [isDiscoveringRooms, setIsDiscoveringRooms] = useState(false);
+  const [hasCompletedRoomDiscovery, setHasCompletedRoomDiscovery] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [clue, setClue] = useState("");
   const [guess, setGuess] = useState("");
@@ -141,13 +142,33 @@ export function ApprovedSdkGameShell({
   }, [gameId]);
 
   const refreshRooms = useCallback(async () => {
+    roomDiscoveryRef.current?.abort(new DOMException("Superseded", "AbortError"));
+    const controller = new AbortController();
+    roomDiscoveryRef.current = controller;
+    const stopTracking = trackOnlineRoomDiscovery(controller);
+    setIsDiscoveringRooms(true);
+    setHasCompletedRoomDiscovery(false);
     try {
-      const page = await runtime.listRooms();
-      setRooms(page.rooms);
+      const discovered = await consumeOnlineRoomDiscovery(
+        `sdk-approved:${gameId}`,
+        (cursor, signal) => runtime.listRooms(cursor, { signal }),
+        { signal: controller.signal },
+      );
+      if (roomDiscoveryRef.current === controller) {
+        setRooms(discovered);
+        setHasCompletedRoomDiscovery(true);
+      }
     } catch (error) {
+      if (controller.signal.aborted) return;
       setMessage(runtimeErrorMessage(error));
+    } finally {
+      stopTracking();
+      if (roomDiscoveryRef.current === controller) {
+        roomDiscoveryRef.current = null;
+        setIsDiscoveringRooms(false);
+      }
     }
-  }, [runtime]);
+  }, [gameId, runtime]);
 
   const commitRoom = useCallback((next: RoomSnapshot | null) => {
     roomRef.current = next;
@@ -219,6 +240,7 @@ export function ApprovedSdkGameShell({
   useEffect(() => {
     return () => {
       watchRef.current?.close();
+      roomDiscoveryRef.current?.abort(new DOMException("Unmounted", "AbortError"));
     };
   }, []);
 
@@ -260,6 +282,16 @@ export function ApprovedSdkGameShell({
       setPending(false);
     }
   }, [attachRoom, runtime]);
+
+  const joinRoom = useCallback(async (code: string, roomGenerationId?: string) => {
+    const current = await runtime.readRoom(code);
+    if (!current) throw new Error("ROOM_NOT_FOUND");
+    return (await runtime.sendCommand(current.code, {
+      expectedRevision: current.revision,
+      expectedRoomInstanceId: roomGenerationId,
+      command: { type: "room/join" },
+    })).room;
+  }, [runtime]);
 
   const send = useCallback(async (command: WordWolfSdkCommand) => {
     if (!room) throw new Error("ROOM_REQUIRED");
@@ -444,14 +476,7 @@ export function ApprovedSdkGameShell({
                 type="button"
                 className={secondaryClass}
                 disabled={pending || joinCode.trim().length !== 4}
-                onClick={() => void run(async () => {
-                  const current = await runtime.readRoom(joinCode);
-                  if (!current) throw new Error("ROOM_NOT_FOUND");
-                  return (await runtime.sendCommand(current.code, {
-                    expectedRevision: current.revision,
-                    command: { type: "room/join" },
-                  })).room;
-                })}
+                onClick={() => void run(() => joinRoom(joinCode))}
               >
                 参加
               </button>
@@ -465,17 +490,29 @@ export function ApprovedSdkGameShell({
                 更新
               </button>
             </div>
-            {rooms.length === 0 ? (
+            {isDiscoveringRooms ? (
+              <p className="mt-4 text-sm text-slate-500">参加できる部屋を確認しています。</p>
+            ) : hasCompletedRoomDiscovery && rooms.length === 0 ? (
               <p className="mt-4 text-sm text-slate-500">現在、募集中の部屋はありません。</p>
-            ) : (
+            ) : hasCompletedRoomDiscovery ? (
               <ul className="mt-4 space-y-2">
                 {rooms.map((candidate) => (
-                  <li key={candidate.code} className="flex items-center justify-between rounded-lg bg-slate-100 p-3">
+                  <li key={candidate.roomGenerationId} className="flex items-center justify-between gap-3 rounded-lg bg-slate-100 p-3">
                     <span className="font-mono font-black">{candidate.code}</span>
                     <span>{candidate.playerCount}/{candidate.maximumPlayers}人</span>
+                    <button
+                      type="button"
+                      className={secondaryClass}
+                      disabled={pending}
+                      onClick={() => void run(() => joinRoom(candidate.code, candidate.roomGenerationId))}
+                    >
+                      参加
+                    </button>
                   </li>
                 ))}
               </ul>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">部屋一覧を確定できませんでした。更新してください。</p>
             )}
           </div>
         </section>

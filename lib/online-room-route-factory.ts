@@ -1,12 +1,14 @@
 import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
+import { normalizeAppLocale } from "@/lib/app-locale";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import {
   assertGameLocaleAvailable,
   assertRoomContentLanguageAccess,
-  filterRoomPageByContentLanguage,
   isLanguageBoundGame,
+  roomContentLanguage,
 } from "@/lib/game-language";
+import type { OnlineRoomListIdentity } from "@/lib/online-room-list";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { authenticatedRoomDraft, authenticatedRoomPlayer } from "@/lib/online-room-input";
 import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
@@ -26,7 +28,7 @@ export type OnlineRoomRouteRoom = {
 };
 
 export type OnlineRoomRouteListPage<Choice = unknown> = {
-  rooms: Choice[];
+  rooms: Array<Choice & OnlineRoomListIdentity>;
   nextCursor?: string | null;
 };
 
@@ -64,7 +66,10 @@ export type OnlineRoomRouteConfig<Room extends OnlineRoomRouteRoom, Choice = unk
   read: {
     loadRoom: (code: string) => Promise<Room | null>;
     loadActiveRoom: (playerId: string) => Promise<Room | null>;
-    listRooms: (cursor: string | null) => Promise<OnlineRoomRouteListPage<Choice>>;
+    listRooms: (
+      cursor: string | null,
+      includeChoice?: (choice: Choice & OnlineRoomListIdentity) => boolean,
+    ) => Promise<OnlineRoomRouteListPage<Choice>>;
     presentRoom: (room: Room, viewerId: string) => unknown;
     afterLoad?: (room: Room, viewerId: string) => Promise<Room>;
     versioned?: boolean;
@@ -144,17 +149,19 @@ export function createOnlineRoomRouteHandlers<Room extends OnlineRoomRouteRoom, 
             );
       }
 
-      const page = await config.read.listRooms(url.searchParams.get("cursor"));
+      const cursor = url.searchParams.get("cursor");
+      const page = !isLanguageBoundGame(config.gameId)
+        ? await config.read.listRooms(cursor)
+        : await (async () => {
+            const session = await loadStoredPlayerSession(authenticatedPlayerId);
+            const requestedLanguage = url.searchParams.get("contentLanguage") ?? session?.locale;
+            return config.read.listRooms(cursor, (choice) => roomContentLanguage(
+              choice as unknown as { contentLanguage?: unknown; contentLocale?: unknown },
+              config.gameId,
+            ) === normalizeAppLocale(requestedLanguage));
+          })();
       if (!isLanguageBoundGame(config.gameId)) return conditionalJsonResponse(request, page);
-      const session = await loadStoredPlayerSession(authenticatedPlayerId);
-      return conditionalJsonResponse(
-        request,
-        filterRoomPageByContentLanguage(
-          config.gameId,
-          page as OnlineRoomRouteListPage<Choice & { contentLocale?: unknown }>,
-          url.searchParams.get("contentLanguage") ?? session?.locale,
-        ),
-      );
+      return conditionalJsonResponse(request, page);
     } catch (error) {
       const response = config.errorResponse(error, "read");
       if (response.status >= 500) {

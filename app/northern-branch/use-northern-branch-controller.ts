@@ -184,6 +184,7 @@ export function useNorthernBranchController() {
   };
 
   const listRooms = async () => {
+    setShowChoices(false);
     try {
       const rooms = await northernBranchRoomApi.fetchJoinableRooms();
       setChoices(rooms);

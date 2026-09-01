@@ -219,11 +219,7 @@ export async function loadActiveRoomFromStore(playerId: string) {
 }
 
 export async function listJoinableRoomsFromStore() {
-  try {
-    return await tahoiyaRoomApi.fetchJoinableRooms();
-  } catch {
-    return [];
-  }
+  return tahoiyaRoomApi.fetchJoinableRooms();
 }
 
 export async function deleteRoomFromStore(code: string, actorId: string) {

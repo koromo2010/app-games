@@ -392,8 +392,11 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
   return room;
 }
 
-export async function listJoinableCodeInterceptRooms(cursor?: unknown) {
-  return roomRuntime.list(cursor);
+export async function listJoinableCodeInterceptRooms(
+  cursor?: unknown,
+  includeChoice?: Parameters<typeof roomRuntime.list>[1],
+) {
+  return roomRuntime.list(cursor, includeChoice);
 }
 
 export async function deleteStoredCodeInterceptRoom(code: string, actorId: string) {

@@ -420,7 +420,8 @@ test("every shared Shell module has executable evidence in the formal package pa
     "online-room": [
       [controller, /type: "room\/join"/],
       [roomLifecycle, /type: "room\/leave"/],
-      [view, /onJoinRoomByCode\(candidate\.code\)/],
+      [view, /onJoinRoomByCode\(candidate\.code, candidate\.roomGenerationId\)/],
+      [view, /hasCompletedRoomDiscovery && rooms\.length === 0/],
       [roomLifecycle, /confirmRoomLeave\(\)/],
       [roomLifecycle, /useGameSdkActiveRoomRestore/],
       [lifecycleActions, /onLeave/],

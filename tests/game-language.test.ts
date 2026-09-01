@@ -59,7 +59,8 @@ test("英語辞書は日本語辞書と同じキーを持ち、変数を展開�
 test("全言語依存Room APIが一覧・作成・参加の言語検査を持つ", async () => {
   const games = ["wordwolf", "tahoiya", "hodoai", "kotoba-senpuku", "nigoichi", "code-intercept"];
   const factory = await readFile(new URL("../lib/online-room-route-factory.ts", import.meta.url), "utf8");
-  assert.match(factory, /filterRoomPageByContentLanguage/);
+  assert.match(factory, /config\.read\.listRooms\(cursor, \(choice\)/);
+  assert.match(factory, /roomContentLanguage/);
   assert.match(factory, /assertGameLocaleAvailable/);
   assert.match(factory, /assertRoomContentLanguageAccess/);
   for (const game of games) {

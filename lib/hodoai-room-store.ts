@@ -327,8 +327,11 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
   return room;
 }
 
-export async function listJoinableHodoaiRooms(cursor?: unknown) {
-  return roomRuntime.list(cursor);
+export async function listJoinableHodoaiRooms(
+  cursor?: unknown,
+  includeChoice?: Parameters<typeof roomRuntime.list>[1],
+) {
+  return roomRuntime.list(cursor, includeChoice);
 }
 
 export async function deleteStoredHodoaiRoom(code: string, actorId: string) {

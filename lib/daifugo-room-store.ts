@@ -236,8 +236,11 @@ export async function applyStoredDaifugoAction(code: string, action: DaifugoRoom
   return room;
 }
 
-export async function listJoinableDaifugoRooms(cursor?: unknown) {
-  return roomRuntime.list(cursor);
+export async function listJoinableDaifugoRooms(
+  cursor?: unknown,
+  includeChoice?: Parameters<typeof roomRuntime.list>[1],
+) {
+  return roomRuntime.list(cursor, includeChoice);
 }
 
 export async function deleteStoredDaifugoRoom(code: string, actorId: string) {

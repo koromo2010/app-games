@@ -10,6 +10,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { GameSdkModuleId } from "@game-fields/game-sdk/modules";
+import type { GameSdkRoomListItem } from "@game-fields/game-sdk";
 import {
   gameSdkRoomHasCommandResponseView,
   type GameSdkRoomWatch,
@@ -25,6 +26,7 @@ import {
   shouldKeepRoomResultAfterDissolve,
 } from "@/lib/room-result-return";
 import { shouldRestartGameSdkRoomWatch } from "./game-sdk-room-watch-policy";
+import { consumeOnlineRoomDiscovery, trackOnlineRoomDiscovery } from "@/lib/online-room-discovery";
 import type { GameSdkFrameRuntime, PackageRoom } from "./game-sdk-frame-types";
 
 type Options = {
@@ -71,13 +73,12 @@ export function useGameSdkRoomLifecycle({
 }: Options) {
   const watchRef = useRef<GameSdkRoomWatch | null>(null);
   const pendingLobbyRoomRef = useRef<PackageRoom | null>(null);
+  const roomDiscoveryRef = useRef<AbortController | null>(null);
 
   const [room, setRoom] = useState<PackageRoom | null>(null);
-  const [rooms, setRooms] = useState<Array<{
-    code: string;
-    playerCount: number;
-    maximumPlayers: number;
-  }>>([]);
+  const [rooms, setRooms] = useState<GameSdkRoomListItem[]>([]);
+  const [isDiscoveringRooms, setIsDiscoveringRooms] = useState(false);
+  const [hasCompletedRoomDiscovery, setHasCompletedRoomDiscovery] = useState(false);
   const [canReturnToRoom, setCanReturnToRoom] = useState(false);
   const [isRoomDissolved, setIsRoomDissolved] = useState(false);
 
@@ -186,11 +187,31 @@ export function useGameSdkRoomLifecycle({
       setRooms([]);
       return;
     }
+    roomDiscoveryRef.current?.abort(new DOMException("Superseded", "AbortError"));
+    const controller = new AbortController();
+    roomDiscoveryRef.current = controller;
+    const stopTracking = trackOnlineRoomDiscovery(controller);
+    setIsDiscoveringRooms(true);
+    setHasCompletedRoomDiscovery(false);
     try {
-      const page = await runtime.listRooms();
-      setRooms(page.rooms);
+      const discovered = await consumeOnlineRoomDiscovery(
+        "sdk-frame",
+        (cursor, signal) => runtime.listRooms(cursor, { signal }),
+        { signal: controller.signal },
+      );
+      if (roomDiscoveryRef.current === controller) {
+        setRooms(discovered);
+        setHasCompletedRoomDiscovery(true);
+      }
     } catch (error) {
+      if (controller.signal.aborted) return;
       handleRuntimeError(error);
+    } finally {
+      stopTracking();
+      if (roomDiscoveryRef.current === controller) {
+        roomDiscoveryRef.current = null;
+        setIsDiscoveringRooms(false);
+      }
     }
   }, [handleRuntimeError, previewOnly, runtime]);
 
@@ -211,6 +232,7 @@ export function useGameSdkRoomLifecycle({
   useEffect(() => {
     return () => {
       watchRef.current?.close();
+      roomDiscoveryRef.current?.abort(new DOMException("Unmounted", "AbortError"));
     };
   }, []);
 
@@ -317,6 +339,8 @@ export function useGameSdkRoomLifecycle({
   return {
     room,
     rooms,
+    isDiscoveringRooms,
+    hasCompletedRoomDiscovery,
     canReturnToRoom,
     isRoomDissolved,
     isRestoringRoom,

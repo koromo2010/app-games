@@ -230,6 +230,7 @@ export function useNigoichiController() {
 
   const listRooms = async () => {
     setError("");
+    setShowChoices(false);
     try {
       const listed = await nigoichiRoomApi.fetchJoinableRooms();
       setChoices(listed);
