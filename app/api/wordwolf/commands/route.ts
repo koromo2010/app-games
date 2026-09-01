@@ -295,6 +295,7 @@ export async function POST(request: Request) {
     ].includes(error.message)) {
       telemetry.reject("game.command", 409, { ...logFields, revision: responseRoom?.revision });
       return Response.json({
+        errorCode: error.message,
         error: error.message === "WORDWOLF_COMMAND_AFTER_DEADLINE"
           ? "Command arrived after the grace period"
           : "Command is not valid for the current room state",

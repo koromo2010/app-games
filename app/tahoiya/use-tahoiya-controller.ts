@@ -10,6 +10,9 @@ import { useTahoiyaDebugActions } from "./use-tahoiya-debug-actions";
 import { useTahoiyaRoomSession } from "./use-tahoiya-room-session";
 import { useTahoiyaRoomActions } from "./use-tahoiya-room-actions";
 import { rememberTahoiyaDeviceTopic, syncTahoiyaDeviceTopicHistory } from "./tahoiya-device-topic-history";
+import { useGameplayActionWindow } from "@/app/hooks/use-gameplay-action-window";
+import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
+import { tahoiyaPhaseTimeLimitSeconds } from "@/lib/tahoiya-room-domain";
 
 export function useTahoiyaController() {
   const [room, setRoom] = useState<TahoiyaRoom | null>(null);
@@ -33,7 +36,7 @@ export function useTahoiyaController() {
   const [isSkippingTopic, setIsSkippingTopic] = useState(false);
   const [message, setMessage] = useState("");
   const [rulesOpen, setRulesOpen] = useState(false);
-  const { now, ready, isRestoringRoom, resultReturnGate } = useTahoiyaRoomSession({ room, playerId, setRoom, setPlayerId, setActivePlayerId, setPlayerName, setAvatarColor, setAvatarImage, setMessage });
+  const { ready, isRestoringRoom, resultReturnGate } = useTahoiyaRoomSession({ room, playerId, setRoom, setPlayerId, setActivePlayerId, setPlayerName, setAvatarColor, setAvatarImage, setMessage });
 
   useEffect(() => {
     if (!playerId) return;
@@ -49,7 +52,20 @@ export function useTahoiyaController() {
   const operationPlayerId = isDebugMode ? activePlayerId : playerId;
   const activePlayer = room?.players.find((player) => player.id === operationPlayerId) ?? null;
   const isHost = Boolean(room && playerId === room.hostId);
-  const viewModel = useTahoiyaViewModel(room, activePlayer, selectedOptionId, definitionIndex, now);
+  const phaseDurationSeconds = room ? tahoiyaPhaseTimeLimitSeconds(room, activePlayer?.id ?? "") : 0;
+  const phaseDeadlineAt = room?.phaseStartedAt && phaseDurationSeconds > 0
+    ? room.phaseStartedAt + phaseDurationSeconds * 1_000
+    : null;
+  const actionWindow = useGameplayActionWindow({
+    plan: room
+      ? {
+          scope: { roomCode: room.code, generation: `${room.round}:${room.phaseStartedAt ?? 0}:${activePlayer?.id ?? "none"}`, phase: room.phase },
+          countdownDeadlineAt: phaseDeadlineAt,
+          serverDeadlineAt: phaseDeadlineAt === null ? null : phaseDeadlineAt + commonGameTimeoutGraceMs(),
+        }
+      : null,
+  });
+  const viewModel = useTahoiyaViewModel(room, activePlayer, selectedOptionId, definitionIndex, actionWindow.remainingSeconds);
 
   const { runRoomAction, dissolveRoom } = useTahoiyaRoomActions({ room, playerId, markRoomDissolved: resultReturnGate.markRoomDissolved, setRoom, setMessage });
   const lobbyActions = useTahoiyaLobbyActions({
@@ -60,7 +76,7 @@ export function useTahoiyaController() {
     room, activePlayer, playerId, isHost, isDebugMode, isAnswerer: viewModel.isAnswerer,
     isAllVoteMode: viewModel.isAllVoteMode, writingDone: viewModel.writingDone,
     votingDone: viewModel.votingDone, definitionIndex, definitionInput, selectedOptionId,
-    isStarting, isPolishing: isPolishingDefinition, runRoomAction, setRoom, setActivePlayerId,
+    isStarting, isPolishing: isPolishingDefinition, actionWindow, runRoomAction, setRoom, setActivePlayerId,
     setDefinitionIndex, setDefinitionInput, setSelectedOptionId, setPolishMessage, setMessage,
     setIsStarting, setIsPolishing: setIsPolishingDefinition,
   });
@@ -89,7 +105,7 @@ export function useTahoiyaController() {
       setPassphrase, setJoinCode, setActivePlayerId, setDefinitionIndex, setDefinitionInput,
       setSelectedOptionId, setPolishMessage, setSkipReason, setSkipComment, setRulesOpen,
     },
-    viewModel,
+    viewModel: { ...viewModel, actionWindowState: actionWindow.state },
     permissions: { isDebugMode, isHost, operationPlayerId, activePlayer },
     actions: { runRoomAction, dissolveRoom, ...lobbyActions, ...gameActions, ...debugActions },
     result: resultReturnGate,

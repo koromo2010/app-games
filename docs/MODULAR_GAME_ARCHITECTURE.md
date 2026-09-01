@@ -113,6 +113,8 @@ AI、スターター、browser RuntimeはSDKの操作前にGame Fields固有hand
 
 ## ワードウルフの移行状況
 
+deadline付きmanual actionのclient共通契約と全consumer inventoryは`docs/GAMEPLAY_ACTION_WINDOW.md`を正本とする。時間源はT-187の`lib/server-clock.ts`、純粋なOPEN/CLOSED/UNCERTAIN判定とat-most-once dispatchは`lib/gameplay-action-window.ts`、React lifecycleとdeadline rearmは`app/hooks/use-gameplay-action-window.ts`へ集約し、game別にclock offset algorithmを持たない。
+
 - domain: `app/wordwolf/game-flow.ts`
 - API client: `app/wordwolf/wordwolf-room-api-client.ts`
 - local/remote room adapter: `app/wordwolf/wordwolf-room-adapter.ts`

@@ -14,7 +14,7 @@ import {
   GameSdkHttpClientRuntimeError,
 } from "@game-fields/game-sdk/client-runtime";
 import { gameTopBannerActionClass } from "@/app/components/GameTopMenu";
-import { subscribeServerClock, synchronizedNow } from "@/lib/server-clock";
+import { useGameplayActionWindow } from "@/app/hooks/use-gameplay-action-window";
 import { GameSdkIframe } from "./GameSdkIframe";
 import type {
   CommonView,
@@ -188,6 +188,8 @@ type ViewProps = {
   runtimeUrl: string;
   title: string;
   phase: string;
+  roomCode: string;
+  timerGeneration: string | number;
   timer: CommonView["timer"];
   remainingSeconds: number | null;
   reducedTime: boolean | undefined;
@@ -203,6 +205,10 @@ type ViewProps = {
 
 type CountdownProps = {
   deadlineAt: number | null;
+  serverDeadlineAt: number | null;
+  roomCode: string;
+  timerGeneration: string | number;
+  phase: string;
   reducedTime: boolean | undefined;
   pending: boolean;
   onRecoverTimeout: () => void;
@@ -210,35 +216,37 @@ type CountdownProps = {
 
 const GameSdkTimerCountdown = memo(function GameSdkTimerCountdown({
   deadlineAt,
+  serverDeadlineAt,
+  roomCode,
+  timerGeneration,
+  phase,
   reducedTime,
   pending,
   onRecoverTimeout,
 }: CountdownProps) {
-  const [now, setNow] = useState(() => synchronizedNow());
-
-  useEffect(() => {
-    const update = () => setNow(synchronizedNow());
-    const interval = window.setInterval(update, 250);
-    const unsubscribeClock = subscribeServerClock(update);
-    return () => {
-      window.clearInterval(interval);
-      unsubscribeClock();
-    };
-  }, [deadlineAt]);
-
-  const remainingSeconds = deadlineAt === null
-    ? null
-    : Math.max(0, Math.ceil((deadlineAt - now) / 1000));
+  const actionWindow = useGameplayActionWindow({
+    plan: {
+      scope: { roomCode, generation: timerGeneration, phase },
+      countdownDeadlineAt: deadlineAt,
+      serverDeadlineAt,
+    },
+  });
+  const remainingSeconds = actionWindow.remainingSeconds;
 
   return (
     <div
       className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3"
       role="timer"
       aria-live="polite"
+      data-action-window-state={actionWindow.state}
     >
       <strong>残り時間</strong>
       <span className="font-mono text-xl font-black">
-        {remainingSeconds === null ? "制限なし" : `${remainingSeconds}秒`}
+        {actionWindow.state === "UNCERTAIN"
+          ? "時刻同期中"
+          : remainingSeconds === null
+            ? "制限なし"
+            : `${remainingSeconds}秒`}
       </span>
       {reducedTime && (
         <button
@@ -260,6 +268,8 @@ export function GameSdkIframeBridge({
   runtimeUrl,
   title,
   phase,
+  roomCode,
+  timerGeneration,
   timer,
   reducedTime,
   timerModuleRequired,
@@ -287,6 +297,10 @@ export function GameSdkIframeBridge({
       {phase !== "lobby" && phase !== "result" && timerModuleRequired && timer && (
         <GameSdkTimerCountdown
           deadlineAt={timer.deadlineAt}
+          serverDeadlineAt={timer.deadlineAt === null ? null : timer.deadlineAt + timer.graceMs}
+          roomCode={roomCode}
+          timerGeneration={timerGeneration}
+          phase={phase}
           reducedTime={reducedTime}
           pending={pending}
           onRecoverTimeout={onRecoverTimeout}

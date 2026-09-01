@@ -1,8 +1,10 @@
 import type { TahoiyaPlayer, TahoiyaRoom } from "@/lib/tahoiya-types";
+import type { GameplayActionWindowState } from "@/lib/gameplay-action-window";
 import { panelClass } from "../wordwolf/styles";
 
 type Props = {
   room: TahoiyaRoom; isAnswerer: boolean; remainingSeconds: number | null;
+  actionWindowState: GameplayActionWindowState;
   isDebugMode: boolean; isHost: boolean; nextWriter: TahoiyaPlayer | null | undefined; nextVoter: TahoiyaPlayer | null | undefined;
   onRemoveWaitingPlayer: (targetPlayerId: string, targetPlayerName: string) => void;
 };
@@ -20,7 +22,7 @@ export function TahoiyaRoundOverview(props: Props) {
     <div className={panelClass}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div><p className="text-xs font-semibold uppercase text-amber-700">Round {room.round}</p><h2 className="mt-1 text-3xl font-black text-slate-950">{room.phase === "lobby" ? "開始待ち" : room.phase === "writing" && props.isAnswerer ? "お題は準備中" : room.word}</h2></div>
-        <div className="flex items-center gap-2">{props.remainingSeconds !== null && (room.phase === "writing" || room.phase === "voting") && <span className={`rounded-lg px-3 py-2 text-sm font-black ${props.remainingSeconds <= 10 ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-900"}`}>残り {props.remainingSeconds}秒</span>}<span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{room.phase}</span></div>
+        <div className="flex items-center gap-2">{props.actionWindowState === "UNCERTAIN" && (room.phase === "writing" || room.phase === "voting") ? <span className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-black text-slate-700">サーバー時刻同期中</span> : props.remainingSeconds !== null && (room.phase === "writing" || room.phase === "voting") && <span className={`rounded-lg px-3 py-2 text-sm font-black ${props.remainingSeconds <= 10 ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-900"}`}>残り {props.remainingSeconds}秒</span>}<span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{room.phase}</span></div>
       </div>
       {props.isDebugMode && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
         <p className="font-bold">デバッグモード中</p><p className="mt-1">{debugStatus}</p><p className="mt-1 text-xs font-semibold text-amber-800">デバッグ操作はトップバーのDEBUGメニューにあります。</p>

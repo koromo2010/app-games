@@ -29,7 +29,7 @@ import {
 } from "@/lib/code-intercept";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
-import { synchronizedNow } from "@/lib/server-clock";
+import { useGameplayActionWindow } from "@/app/hooks/use-gameplay-action-window";
 
 const lastRoomKey = "code-intercept-last-room";
 const ownerIdKey = "code-intercept-owner-id";
@@ -97,6 +97,7 @@ export function useCodeInterceptController() {
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const timeoutClueSubmissionKeyRef = useRef("");
+  const timeoutExpiryKeyRef = useRef("");
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "game-result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
 
   const playerId = session?.id ?? "";
@@ -139,45 +140,69 @@ export function useCodeInterceptController() {
   const timerPhaseStartedAt = room?.phaseStartedAt;
   const timerDurationSeconds = room ? codeInterceptPhaseTimeLimitSeconds(room) : 0;
   const timerClaimDelayMs = room ? clientTimeoutClaimDelayMs({ playerId, hostId: room.hostId, playerIds: room.players.map((player) => player.id) }) : 0;
+  const timerDeadlineAt = timerPhaseStartedAt && timerDurationSeconds > 0
+    ? timerPhaseStartedAt + timerDurationSeconds * 1_000
+    : null;
+  const actionWindow = useGameplayActionWindow({
+    plan: room && timerPhase
+      ? {
+          scope: { roomCode: room.code, generation: `${room.gameNumber}:${room.roundNumber}:${timerPhaseStartedAt ?? 0}`, phase: timerPhase },
+          countdownDeadlineAt: timerDeadlineAt,
+          serverDeadlineAt: timerDeadlineAt === null ? null : timerDeadlineAt + codeInterceptTimeoutGraceMs(),
+        }
+      : null,
+  });
+  const dispatchManual = actionWindow.dispatchManual;
 
   useEffect(() => {
-    if (!timerRoomCode || !playerId || timerDurationSeconds <= 0 || !timerPhaseStartedAt || !timerPhase || !["code-length", "clue", "answer"].includes(timerPhase)) return;
-    const delay = Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 + codeInterceptTimeoutGraceMs() - synchronizedNow()) + 100 + timerClaimDelayMs;
+    if (!timerRoomCode || !playerId || timerDurationSeconds <= 0 || !timerPhaseStartedAt || !timerPhase || !["code-length", "clue", "answer"].includes(timerPhase) || actionWindow.state !== "CLOSED") return;
+    const key = `${timerRoomCode}:${timerPhase}:${timerPhaseStartedAt}`;
+    if (timeoutExpiryKeyRef.current === key) return;
+    timeoutExpiryKeyRef.current = key;
     const timer = window.setTimeout(() => {
       void applyCodeInterceptRoomAction(timerRoomCode, { type: "expire-phase", actorId: playerId, phaseStartedAt: timerPhaseStartedAt })
         .then((saved) => setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current))
         .catch(() => undefined);
-    }, delay);
+    }, 100 + timerClaimDelayMs);
     return () => window.clearTimeout(timer);
-  }, [playerId, timerClaimDelayMs, timerDurationSeconds, timerPhase, timerPhaseStartedAt, timerRoomCode]);
+  }, [actionWindow.state, playerId, timerClaimDelayMs, timerDurationSeconds, timerPhase, timerPhaseStartedAt, timerRoomCode]);
 
   const runAction = useCallback(async (action: CodeInterceptRoomAction) => {
-    if (!room || isSaving) return null;
+    const clueActionKey = action.type === "submit-clues" || action.type === "submit-timeout-clues"
+      ? `submit-clues:${action.actorId}`
+      : null;
+    if (!room || (!clueActionKey && isSaving)) return null;
     setIsSaving(true); setError("");
-    try { const saved = await applyCodeInterceptRoomAction(room.code, action); setRoom((current) => preferLatestOnlineRoom(current, saved)); return saved; }
+    try {
+      const saved = clueActionKey
+        ? await dispatchManual({
+            actionKey: clueActionKey,
+            execute: () => applyCodeInterceptRoomAction(room.code, action),
+            classifyError: () => "ambiguous",
+          }).then((result) => result.kind === "accepted" ? result.value : null)
+        : await applyCodeInterceptRoomAction(room.code, action);
+      if (!saved) return null;
+      setRoom((current) => preferLatestOnlineRoom(current, saved));
+      return saved;
+    }
     catch (caught) { setError(apiMessage(caught, "操作を保存できませんでした。")); return null; }
     finally { setIsSaving(false); }
-  }, [isSaving, room]);
+  }, [dispatchManual, isSaving, room]);
   useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: () => runAction({ type: "confirm-lobby-return", actorId: playerId }) });
 
   useEffect(() => {
-    if (!room || room.phase !== "clue" || !room.phaseStartedAt || room.clueTimeLimitSeconds <= 0 || !isClueGiver || !myTeamId || room.clues[myTeamId]) return;
+    if (!room || room.phase !== "clue" || !room.phaseStartedAt || room.clueTimeLimitSeconds <= 0 || !isClueGiver || !myTeamId || room.clues[myTeamId] || actionWindow.remainingSeconds !== 0) return;
     const typedClues = clueDrafts.slice(0, myCodeLength);
     if (!typedClues.some((clue) => clue.trim())) return;
     const key = `${draftRound}:${playerId}`;
-    const delay = Math.max(0, room.phaseStartedAt + room.clueTimeLimitSeconds * 1000 - synchronizedNow());
-    const timer = window.setTimeout(() => {
-      if (timeoutClueSubmissionKeyRef.current === key) return;
-      timeoutClueSubmissionKeyRef.current = key;
-      const action: CodeInterceptRoomAction = typedClues.every((clue) => clue.trim())
-        ? { type: "submit-clues", actorId: playerId, clues: typedClues.map((clue) => clue.trim()) }
-        : { type: "submit-timeout-clues", actorId: playerId, clues: typedClues };
-      void applyCodeInterceptRoomAction(room.code, action)
-        .then((saved) => setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current))
-        .catch(() => undefined);
-    }, delay);
-    return () => window.clearTimeout(timer);
-  }, [clueDrafts, draftRound, isClueGiver, myCodeLength, myTeamId, playerId, room]);
+    if (timeoutClueSubmissionKeyRef.current === key) return;
+    timeoutClueSubmissionKeyRef.current = key;
+    const action: CodeInterceptRoomAction = typedClues.every((clue) => clue.trim())
+      ? { type: "submit-clues", actorId: playerId, clues: typedClues.map((clue) => clue.trim()) }
+      : { type: "submit-timeout-clues", actorId: playerId, clues: typedClues };
+    void runAction(action)
+      .catch(() => undefined);
+  }, [actionWindow.remainingSeconds, clueDrafts, draftRound, isClueGiver, myCodeLength, myTeamId, playerId, room, runAction]);
 
   const createRoom = async () => {
     if (!session?.id || isSaving) return;

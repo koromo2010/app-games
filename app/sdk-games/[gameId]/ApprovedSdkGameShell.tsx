@@ -32,7 +32,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommonRoomChatMount } from "@/app/components/room-chat/CommonRoomChatMount";
 import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
 import { authoritativeTimerErrorDirective } from "@/lib/game-timer/retry";
-import { observeServerDate, synchronizedNow } from "@/lib/server-clock";
+import { observeServerDate } from "@/lib/server-clock";
+import { useGameplayActionWindow } from "@/app/hooks/use-gameplay-action-window";
 
 type WordWolfRoomView = GameSdkOnlineRoomView<
   {
@@ -117,7 +118,6 @@ export function ApprovedSdkGameShell({
   const [guess, setGuess] = useState("");
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
-  const [clockNow, setClockNow] = useState<number | null>(null);
   const [canReturnToRoom, setCanReturnToRoom] = useState(false);
   const [isRoomDissolved, setIsRoomDissolved] = useState(false);
   const [playerDefaults, setPlayerDefaults] = useState<
@@ -270,20 +270,6 @@ export function ApprovedSdkGameShell({
     return result.room;
   }, [room, runtime]);
 
-  useEffect(() => {
-    const deadlineAt = room?.view.common.timer?.deadlineAt;
-    if (!deadlineAt || room?.phase === "result") return;
-    const updateClock = () => {
-      setClockNow(synchronizedNow());
-    };
-    const initial = window.setTimeout(updateClock, 0);
-    const interval = window.setInterval(updateClock, 1_000);
-    return () => {
-      window.clearTimeout(initial);
-      window.clearInterval(interval);
-    };
-  }, [room?.phase, room?.view.common.timer?.deadlineAt]);
-
   const timerFinalizationPlan = useMemo(() => {
     const timer = room?.view.common.timer;
     if (!room || !timer?.deadlineAt || room.phase === "result") return null;
@@ -394,9 +380,16 @@ export function ApprovedSdkGameShell({
   const app = room?.view.app;
   const self = common?.players.find((player) => player.isSelf);
   const timer = common?.timer;
-  const remainingSeconds = timer?.deadlineAt && clockNow !== null
-    ? Math.max(0, Math.ceil((timer.deadlineAt - clockNow) / 1000))
-    : null;
+  const timerActionWindow = useGameplayActionWindow({
+    plan: room && timer
+      ? {
+          scope: { roomCode: room.code, generation: timer.turnSequence, phase: room.phase },
+          countdownDeadlineAt: timer.deadlineAt,
+          serverDeadlineAt: timer.deadlineAt === null ? null : timer.deadlineAt + timer.graceMs,
+        }
+      : null,
+  });
+  const remainingSeconds = timerActionWindow.remainingSeconds;
 
   if (!room) {
     return (
@@ -753,10 +746,10 @@ export function ApprovedSdkGameShell({
 
         <section className={panelClass}>
           {timer && (
-            <div className="mb-5 flex items-center justify-between rounded-lg bg-slate-950 px-4 py-3 text-white">
+            <div className="mb-5 flex items-center justify-between rounded-lg bg-slate-950 px-4 py-3 text-white" data-action-window-state={timerActionWindow.state}>
               <strong>残り時間</strong>
               <span className="font-mono text-xl font-black">
-                {remainingSeconds === null ? "制限なし" : `${remainingSeconds}秒`}
+                {timerActionWindow.state === "UNCERTAIN" ? "時刻同期中" : remainingSeconds === null ? "制限なし" : `${remainingSeconds}秒`}
               </span>
             </div>
           )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
@@ -12,7 +12,7 @@ import { northernCards } from "@/lib/northern-branch-data";
 import { northernRules } from "@/lib/northern-branch-game";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
-import { synchronizedNow } from "@/lib/server-clock";
+import { useGameplayActionWindow } from "@/app/hooks/use-gameplay-action-window";
 import type {
   NorthernGameAction,
   NorthernRoom,
@@ -61,6 +61,7 @@ export function useNorthernBranchController() {
   const [paymentSelection, setPaymentSelection] = useState<{ playerId: string; indexes: number[] }>({ playerId: "", indexes: [] });
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const timeoutExpiryKeyRef = useRef("");
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "finished", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
 
   const roomCode = room?.code;
@@ -99,6 +100,18 @@ export function useNorthernBranchController() {
   const timerTurnStartedAt = room?.turnStartedAt;
   const timerDurationSeconds = room?.turnTimeLimitSeconds ?? 0;
   const timerClaimDelayMs = room ? clientTimeoutClaimDelayMs({ playerId, hostId: room.hostId, playerIds: room.players.map((player) => player.id) }) : 0;
+  const timerDeadlineAt = timerTurnStartedAt && timerDurationSeconds > 0
+    ? timerTurnStartedAt + timerDurationSeconds * 1_000
+    : null;
+  const actionWindow = useGameplayActionWindow({
+    plan: room && roomPhase
+      ? {
+          scope: { roomCode: room.code, generation: `${room.gameNumber}:${timerTurnStartedAt ?? 0}`, phase: roomPhase },
+          countdownDeadlineAt: timerDeadlineAt,
+          serverDeadlineAt: timerDeadlineAt,
+        }
+      : null,
+  });
   const configItems = room ? [
     { label: "参加人数", value: `${room.players.length}/4人` },
     { label: "勝利条件", value: `${northernRules.victoryPoints}点` },
@@ -109,14 +122,17 @@ export function useNorthernBranchController() {
   ] : [];
 
   useEffect(() => {
-    if (!roomCode || !playerId || roomPhase !== "playing" || !timerTurnStartedAt || timerDurationSeconds <= 0) return;
+    if (!roomCode || !playerId || roomPhase !== "playing" || !timerTurnStartedAt || timerDurationSeconds <= 0 || actionWindow.state !== "CLOSED") return;
+    const key = `${roomCode}:${timerTurnStartedAt}`;
+    if (timeoutExpiryKeyRef.current === key) return;
+    timeoutExpiryKeyRef.current = key;
     const timer = window.setTimeout(() => {
       void applyNorthernBranchRoomAction(roomCode, { type: "expire-turn", actorId: playerId, turnStartedAt: timerTurnStartedAt })
         .then((saved) => setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current))
         .catch(() => undefined);
-    }, Math.max(0, timerTurnStartedAt + timerDurationSeconds * 1000 - synchronizedNow()) + 100 + timerClaimDelayMs);
+    }, 100 + timerClaimDelayMs);
     return () => window.clearTimeout(timer);
-  }, [playerId, roomCode, roomPhase, timerClaimDelayMs, timerDurationSeconds, timerTurnStartedAt]);
+  }, [actionWindow.state, playerId, roomCode, roomPhase, timerClaimDelayMs, timerDurationSeconds, timerTurnStartedAt]);
 
   const runAction = useCallback(async (action: NorthernRoomAction) => {
     if (!room) return null;

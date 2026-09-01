@@ -250,7 +250,7 @@ export function NigoichiDesktopLayout({ controller }: { controller: NigoichiCont
           </section>}
 
           {room.phase === "clue" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
-            <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">{room.cardsPerPlayer}枚から連想語を{room.associationWordCount}個書く</h2><p className="mt-1 text-sm text-slate-400">カードとの分類・対応付けは不要です・提出済み {submittedAssociations}/{room.players.length}人</p></div>{room.phaseStartedAt && <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.clueTimeLimitSeconds} startedAt={room.phaseStartedAt} label="入力時間" />}</div>
+            <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">{room.cardsPerPlayer}枚から連想語を{room.associationWordCount}個書く</h2><p className="mt-1 text-sm text-slate-400">カードとの分類・対応付けは不要です・提出済み {submittedAssociations}/{room.players.length}人</p></div>{room.phaseStartedAt && <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.clueTimeLimitSeconds} startedAt={room.phaseStartedAt} label="入力時間" scope={{ roomCode: room.code, generation: `${room.gameNumber}:${room.phaseStartedAt}`, phase: room.phase }} />}</div>
             <div className="mt-5 space-y-4">{controllablePlayers.map((player) => {
               const hand = room.hands[player.id];
               if (!hand) return null;
@@ -272,7 +272,7 @@ export function NigoichiDesktopLayout({ controller }: { controller: NigoichiCont
           </section>}
 
           {room.phase === "guess" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
-            <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">連想語から余り番号を探す</h2><p className="mt-1 text-sm text-slate-400">自分に配られたカードは選べません・予想済み {submittedGuesses}/{room.players.length}人</p></div>{room.phaseStartedAt && <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.guessTimeLimitSeconds} startedAt={room.phaseStartedAt} label="予想時間" />}</div>
+            <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">連想語から余り番号を探す</h2><p className="mt-1 text-sm text-slate-400">自分に配られたカードは選べません・予想済み {submittedGuesses}/{room.players.length}人</p></div>{room.phaseStartedAt && <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.guessTimeLimitSeconds} startedAt={room.phaseStartedAt} label="予想時間" scope={{ roomCode: room.code, generation: `${room.gameNumber}:${room.phaseStartedAt}`, phase: room.phase }} />}</div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{room.players.map((player) => <div key={player.id} className="rounded-xl border border-white/10 bg-white/[0.05] p-4"><p className="text-xs font-bold text-slate-400">{player.name}</p><ol className="mt-2 space-y-1">{room.associations[player.id]?.map((clue, index) => <li key={index} className="font-black">{index + 1}. {clue}</li>)}</ol></div>)}</div>
             <div className="mt-5 space-y-4">{controllablePlayers.map((player) => {
               const guessed = room.guesses[player.id];

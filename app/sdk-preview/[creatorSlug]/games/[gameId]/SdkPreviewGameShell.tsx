@@ -20,6 +20,7 @@ import {
   useSdkPreviewSessionRequired,
 } from "@/app/sdk-preview/SdkPreviewSessionGate";
 import { aiActivityFetch } from "@/lib/ai-activity-client";
+import { getServerClockSnapshot, observeServerDate } from "@/lib/server-clock";
 import type { DrawingStroke } from "@/lib/drawing-canvas";
 import { createStandardPlayingCardDeck } from "@/lib/playing-cards";
 import type {
@@ -135,6 +136,7 @@ async function generatePreviewLlm(
   const normalizedRequest = normalizeGameSdkLlmRequest(
     request as GameSdkLlmRequest,
   );
+  const requestedAt = Date.now();
   const response = await aiActivityFetch(
     "SDKゲームがAI回答を生成中",
     "/api/sdk-preview/llm",
@@ -149,6 +151,7 @@ async function generatePreviewLlm(
       }),
     },
   );
+  observeServerDate(response.headers.get("date"), requestedAt, Date.now());
   const payload = await response.json().catch(() => null) as {
     response?: GameSdkLlmResponse;
     error?: unknown;
@@ -171,6 +174,7 @@ async function requestPreviewContentSource(
   operation: keyof GameSdkContentSource,
   request: unknown,
 ) {
+  const requestedAt = Date.now();
   const response = await fetch("/api/sdk-preview/content-source", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -183,6 +187,7 @@ async function requestPreviewContentSource(
       request,
     }),
   });
+  observeServerDate(response.headers.get("date"), requestedAt, Date.now());
   const payload = await response.json().catch(() => null) as {
     response?: unknown;
     error?: unknown;
@@ -208,7 +213,8 @@ function previewTimestamp() {
 }
 
 function previewNow() {
-  return Date.now();
+  const snapshot = getServerClockSnapshot();
+  return snapshot.sampleState === "fresh" ? snapshot.serverNow : null;
 }
 
 function createPreviewRoomCode() {
@@ -279,7 +285,7 @@ export function SdkPreviewGameShell({
   const [settingValues, setSettingValues] = useState(
     () => createSdkPreviewSettingValues(settingDefinitions),
   );
-  const [startedAt, setStartedAt] = useState(() => Date.now());
+  const [startedAt, setStartedAt] = useState<number | null>(() => previewNow());
   const [frameHeight, setFrameHeight] = useState(680);
   const [message, setMessage] = useState("");
   const [moduleListOpen, setModuleListOpen] = useState(false);

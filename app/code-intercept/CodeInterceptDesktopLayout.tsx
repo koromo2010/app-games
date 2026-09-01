@@ -83,7 +83,7 @@ function AnswerProposalList({ room, answererIds, proposals }: { room: CodeInterc
 function PhaseTimer({ room }: { room: CodeInterceptRoom }) {
   const durationSeconds = codeInterceptPhaseTimeLimitSeconds(room);
   return room.phaseStartedAt && durationSeconds > 0
-    ? <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={durationSeconds} startedAt={room.phaseStartedAt} label="制限時間" />
+    ? <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={durationSeconds} startedAt={room.phaseStartedAt} label="制限時間" scope={{ roomCode: room.code, generation: `${room.gameNumber}:${room.roundNumber}:${room.phaseStartedAt}`, phase: room.phase }} />
     : null;
 }
 

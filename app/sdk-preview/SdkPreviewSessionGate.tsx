@@ -8,6 +8,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { observeServerDate } from "@/lib/server-clock";
 
 type SessionState = "checking" | "ready" | "required" | "failed";
 
@@ -43,26 +44,26 @@ export function SdkPreviewSessionGate({
       );
     }
 
-    const verify = async () => {
-      const exchange = await fetch("/api/sdk-preview/session", {
+    const postSession = async (body: { creatorSlug: string; linkCode?: string }) => {
+      const requestedAt = Date.now();
+      const response = await fetch("/api/sdk-preview/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         cache: "no-store",
-        body: JSON.stringify({
-          creatorSlug,
-          ...(linkCode ? { linkCode } : {}),
-        }),
+        body: JSON.stringify(body),
+      });
+      observeServerDate(response.headers.get("date"), requestedAt, Date.now());
+      return response;
+    };
+    const verify = async () => {
+      const exchange = await postSession({
+        creatorSlug,
+        ...(linkCode ? { linkCode } : {}),
       });
       if (!exchange.ok) return exchange;
       if (!linkCode) return exchange;
-      return fetch("/api/sdk-preview/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        cache: "no-store",
-        body: JSON.stringify({ creatorSlug }),
-      });
+      return postSession({ creatorSlug });
     };
 
     void verify()

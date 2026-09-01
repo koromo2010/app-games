@@ -503,6 +503,8 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
             runtimeUrl={runtimeUrl}
             title={title}
             phase={room.phase}
+            roomCode={room.code}
+            timerGeneration={timer?.turnSequence ?? room.revision}
             timer={timer}
             remainingSeconds={remainingSeconds}
             reducedTime={reducedTime}

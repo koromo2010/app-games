@@ -51,7 +51,7 @@ export function TahoiyaDesktopLayout({ controller }: { controller: TahoiyaContro
   const { isDebugMode, isHost, operationPlayerId, activePlayer } = permissions;
   const { isAllVoteMode, answererCandidates, answerer, isAnswerer, activePlayerDefinitions,
     hasActivePlayerSubmitted, hasActivePlayerVoted, displayedVoteOptionId, definitionTargetCount,
-    writingDone, voterTarget, votingDone, remainingSeconds, nextWriter, nextVoter, sortedScores,
+    writingDone, voterTarget, votingDone, remainingSeconds, actionWindowState, nextWriter, nextVoter, sortedScores,
     roomConfigItems } = viewModel;
 
   return (
@@ -122,7 +122,7 @@ export function TahoiyaDesktopLayout({ controller }: { controller: TahoiyaContro
         </aside>
         <section className="space-y-4">
           {!room ? <TahoiyaEmptyState /> : <>
-            <TahoiyaRoundOverview room={room} isAnswerer={isAnswerer} remainingSeconds={remainingSeconds}
+            <TahoiyaRoundOverview room={room} isAnswerer={isAnswerer} remainingSeconds={remainingSeconds} actionWindowState={actionWindowState}
               isDebugMode={isDebugMode} isHost={isHost} nextWriter={nextWriter} nextVoter={nextVoter}
               onRemoveWaitingPlayer={(targetPlayerId, targetPlayerName) => void actions.removeWaitingPlayer(targetPlayerId, targetPlayerName)} />
             {room.phase === "writing" && <TahoiyaWritingPanel room={room} activePlayer={activePlayer} isAnswerer={isAnswerer}

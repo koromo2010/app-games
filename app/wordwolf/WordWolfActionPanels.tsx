@@ -1,5 +1,6 @@
 import type { KeyboardEventHandler } from "react";
 import type { Player, Room } from "@/lib/wordwolf-game-types";
+import type { GameplayActionWindowState } from "@/lib/gameplay-action-window";
 import { cyanButtonClass, inputClass } from "./styles";
 
 type WordWolfActionPanelsProps = {
@@ -9,6 +10,7 @@ type WordWolfActionPanelsProps = {
   clueSubmittedCount: number;
   clueParticipantCount: number;
   turnSecondsLeft: number | null;
+  actionWindowState: GameplayActionWindowState;
   clueInput: string;
   setClueInput: (value: string) => void;
   onClueKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
@@ -44,6 +46,7 @@ export function WordWolfActionPanels(props: WordWolfActionPanelsProps) {
     clueSubmittedCount,
     clueParticipantCount,
     turnSecondsLeft,
+    actionWindowState,
     clueInput,
     setClueInput,
     onClueKeyDown,
@@ -102,7 +105,9 @@ export function WordWolfActionPanels(props: WordWolfActionPanelsProps) {
             この周の投稿: {clueSubmittedCount}/{clueParticipantCount}
           </p>
         )}
-        {turnSecondsLeft !== null && (
+        {actionWindowState === "UNCERTAIN" ? (
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">サーバー時刻同期中</div>
+        ) : turnSecondsLeft !== null && (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">
             残り {turnSecondsLeft} 秒
           </div>
@@ -156,7 +161,9 @@ export function WordWolfActionPanels(props: WordWolfActionPanelsProps) {
             </p>
           </div>
         )}
-        {turnSecondsLeft !== null && (
+        {actionWindowState === "UNCERTAIN" ? (
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">サーバー時刻同期中</div>
+        ) : turnSecondsLeft !== null && (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">
             残り {turnSecondsLeft} 秒
           </div>
@@ -189,7 +196,9 @@ export function WordWolfActionPanels(props: WordWolfActionPanelsProps) {
         <p className="mt-2 text-sm leading-6 text-slate-700">
           投票対象は {accusedPlayer?.name} です。狼は村側のお題を当てれば逆転勝利です。
         </p>
-        {turnSecondsLeft !== null && (
+        {actionWindowState === "UNCERTAIN" ? (
+          <div className="mt-4 rounded-lg border border-slate-300 bg-white/70 px-3 py-2 text-sm font-semibold text-slate-700">サーバー時刻同期中</div>
+        ) : turnSecondsLeft !== null && (
           <div className="mt-4 rounded-lg border border-amber-300 bg-white/70 px-3 py-2 text-sm font-semibold text-amber-950">
             残り {turnSecondsLeft} 秒
           </div>

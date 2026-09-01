@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useGameplayActionWindow } from "@/app/hooks/use-gameplay-action-window";
+import { wordWolfTimeoutGraceMs } from "@/lib/wordwolf-command-domain";
 import type { Phase } from "@/lib/wordwolf-game-types";
 
 export function getWordWolfPhaseLimitSeconds(phase: Phase, configuredSeconds: number) {
@@ -10,16 +11,30 @@ export function getWordWolfPhaseLimitSeconds(phase: Phase, configuredSeconds: nu
   return 0;
 }
 
-export function useWordWolfPhaseClock(input: { phase?: Phase; configuredSeconds: number; startedAt?: number | null; limitSecondsOverride?: number }) {
-  const [now, setNow] = useState(() => Date.now());
+export function useWordWolfPhaseClock(input: {
+  roomCode?: string;
+  generation?: string | number;
+  phase?: Phase;
+  configuredSeconds: number;
+  startedAt?: number | null;
+  limitSecondsOverride?: number;
+}) {
   const limitSeconds = input.limitSecondsOverride ?? (input.phase ? getWordWolfPhaseLimitSeconds(input.phase, input.configuredSeconds) : 0);
-  useEffect(() => {
-    if (!input.startedAt || limitSeconds <= 0) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [input.startedAt, limitSeconds]);
-  const secondsLeft = input.startedAt && limitSeconds > 0
-    ? Math.max(0, limitSeconds - Math.floor((now - input.startedAt) / 1000))
+  const deadlineAt = input.startedAt && limitSeconds > 0
+    ? input.startedAt + limitSeconds * 1_000
     : null;
-  return { secondsLeft };
+  const actionWindow = useGameplayActionWindow({
+    plan: input.roomCode && input.phase && input.generation !== undefined
+      ? {
+          scope: {
+            roomCode: input.roomCode,
+            generation: input.generation,
+            phase: input.phase,
+          },
+          countdownDeadlineAt: deadlineAt,
+          serverDeadlineAt: deadlineAt === null ? null : deadlineAt + wordWolfTimeoutGraceMs(),
+        }
+      : null,
+  });
+  return { secondsLeft: actionWindow.remainingSeconds, actionWindow };
 }

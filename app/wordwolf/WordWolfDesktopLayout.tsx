@@ -32,7 +32,7 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
     headerAvatarColor, headerAvatarImage, ownWord, resultTitle, topicSourceLabel, voteVoters,
     votedCount, selectedVoteTargetId, clueParticipants, clueSubmittedCount, canSubmitClue,
     voteCandidates, allowedWolfCount, wolfCountOptions, isRunoffVote, runoffCandidateNames,
-    roundProgressLabel, turnSecondsLeft, shouldShowClueLog, hasWolfInCurrentGame,
+    roundProgressLabel, turnSecondsLeft, actionWindow, shouldShowClueLog, hasWolfInCurrentGame,
     isMyClueTurn, isMyVoteTurn, isMyFinalAnswerTurn, currentPlayerId,
   } = viewModel;
 
@@ -178,6 +178,7 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
                 clueSubmittedCount={clueSubmittedCount}
                 clueParticipantCount={clueParticipants.length}
                 turnSecondsLeft={turnSecondsLeft}
+                actionWindowState={actionWindow.state}
                 clueInput={clueInput}
                 setClueInput={setters.setClueInput}
                 onClueKeyDown={actions.submitClueOnEnter}

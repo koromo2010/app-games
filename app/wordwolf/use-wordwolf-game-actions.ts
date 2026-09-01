@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, type Dispatch, type KeyboardEvent, type
 import { createGameTimerEventId } from "@/lib/game-timer/event";
 import type { Room, WordWolfRoomAction } from "@/lib/wordwolf-game-types";
 import { getVoteVoters } from "./game-flow";
-import { castWordWolfVote, expireWordWolfPhase, startWordWolfGame, submitWordWolfClue, submitWordWolfGuessCommand } from "./wordwolf-room-api-client";
+import { castWordWolfVote, expireWordWolfPhase, startWordWolfGame, submitWordWolfClue, submitWordWolfGuessCommand, wordWolfCommandErrorDisposition } from "./wordwolf-room-api-client";
 import { loadRoomFromStore, normalizeWolfIds, saveRoom } from "./wordwolf-room-adapter";
+import type { GameplayActionWindowController } from "@/app/hooks/use-gameplay-action-window";
 
 type Args = {
   room: Room | null; turnSecondsLeft: number | null; clueActorId: string; currentPlayerId: string; voteActorId: string; guessActorId: string;
+  actionWindow: GameplayActionWindowController;
   clueInput: string; guessInput: string; isGuessJudging: boolean; isStarting: boolean; isVoteSubmitting: boolean;
   acceptRoom: (room: Room) => void; setClueInput: Dispatch<SetStateAction<string>>; setGuessInput: Dispatch<SetStateAction<string>>;
   setIsGuessJudging: Dispatch<SetStateAction<boolean>>; setIsStarting: Dispatch<SetStateAction<boolean>>; setIsVoteSubmitting: Dispatch<SetStateAction<boolean>>;
@@ -18,9 +20,6 @@ type Args = {
 export function useWordWolfGameActions(args: Args) {
   const timeoutActionKeyRef = useRef("");
   const startPendingRef = useRef(false);
-  const clueSubmissionPendingRef = useRef(false);
-  const voteSubmissionPendingRef = useRef(false);
-  const guessSubmissionPendingRef = useRef(false);
   const guessFeedbackPendingRef = useRef(false);
   const startGame = async () => {
     if (!args.room || args.isStarting || startPendingRef.current) return;
@@ -33,20 +32,25 @@ export function useWordWolfGameActions(args: Args) {
     } catch { args.setError("ゲームを開始できませんでした。もう一度試してください。"); }
     finally { startPendingRef.current = false; args.setIsStarting(false); }
   };
-  const submitClue = useCallback(async (atTimeout = false) => {
-    if (!args.room || args.room.phase !== "clue" || (!atTimeout && args.turnSecondsLeft === 0 && args.room.turnTimeLimitSeconds > 0)) return false;
-    if (clueSubmissionPendingRef.current) return true;
+  const submitClue = useCallback(async () => {
+    if (!args.room || args.room.phase !== "clue") return false;
     const room = args.room;
     const text = args.clueInput.trim(); if (!args.clueActorId || !text) return false;
     const actorId = args.clueActorId;
-    clueSubmissionPendingRef.current = true;
     args.setIsClueSubmitting(true);
+    const result = await args.actionWindow.dispatchManual({
+      actionKey: `submit-clue:${actorId}`,
+      execute: () => submitWordWolfClue(room, actorId, text, crypto.randomUUID()),
+      classifyError: wordWolfCommandErrorDisposition,
+    });
     try {
-      const result = await submitWordWolfClue(room, actorId, text, crypto.randomUUID());
-      args.setClueInput("");
-      args.acceptRoom(result.room);
-      return true;
-    } catch {
+      if (result.kind === "accepted") {
+        args.setClueInput("");
+        args.acceptRoom(result.value.room);
+        return true;
+      }
+      if (result.kind === "duplicate") return true;
+      if (result.kind === "closed") return false;
       const latest = await loadRoomFromStore(room.code);
       if (latest) args.acceptRoom(latest);
       if (latest?.clues.some((clue) => clue.round === room.currentRound && clue.playerId === actorId)) {
@@ -54,10 +58,11 @@ export function useWordWolfGameActions(args: Args) {
         args.setError("");
         return true;
       }
-      args.setError("発言を反映できませんでした。最新の状態を読み込みました。");
+      args.setError(result.kind === "authoritative-expired"
+        ? "受付期限を過ぎたため、サーバーの最新状態を読み込みました。"
+        : "発言を反映できませんでした。最新の状態を読み込みました。");
       return false;
     } finally {
-      clueSubmissionPendingRef.current = false;
       args.setIsClueSubmitting(false);
     }
   }, [args]);
@@ -68,35 +73,51 @@ export function useWordWolfGameActions(args: Args) {
     await attempt();
   }, [args]);
   const castVote = useCallback(async (targetId: string) => {
-    if (!args.room || args.room.phase !== "vote" || (args.turnSecondsLeft === 0 && args.room.turnTimeLimitSeconds > 0) || !args.voteActorId || !targetId || args.isVoteSubmitting || voteSubmissionPendingRef.current) return;
-    const roomCode = args.room.code;
+    if (!args.room || args.room.phase !== "vote" || !args.voteActorId || !targetId || args.isVoteSubmitting) return;
+    const room = args.room;
+    const roomCode = room.code;
     const actorId = args.voteActorId;
-    voteSubmissionPendingRef.current = true;
     args.setIsVoteSubmitting(true);
     args.setError("");
+    const result = await args.actionWindow.dispatchManual({
+      actionKey: `cast-vote:${actorId}`,
+      execute: () => castWordWolfVote(room, actorId, targetId, crypto.randomUUID()),
+      classifyError: wordWolfCommandErrorDisposition,
+    });
     try {
-      const result = await castWordWolfVote(args.room, actorId, targetId, crypto.randomUUID());
-      args.acceptRoom(result.room);
-    } catch {
+      if (result.kind === "accepted") {
+        args.acceptRoom(result.value.room);
+        return;
+      }
+      if (result.kind === "duplicate" || result.kind === "closed") return;
       const latest = await loadRoomFromStore(roomCode);
       if (latest) args.acceptRoom(latest);
       if (latest?.votes[actorId]) args.setError("");
-      else args.setError("投票を反映できませんでした。最新の状態を読み込みました。");
+      else args.setError(result.kind === "authoritative-expired"
+        ? "投票の受付期限を過ぎたため、サーバーの最新状態を読み込みました。"
+        : "投票を反映できませんでした。最新の状態を読み込みました。");
     } finally {
-      voteSubmissionPendingRef.current = false;
       args.setIsVoteSubmitting(false);
     }
   }, [args]);
   const submitWolfGuess = useCallback(async (isTimeout = false) => {
-    if (!args.room || !args.guessActorId || !args.room.accusedId || args.guessActorId !== args.room.accusedId || !normalizeWolfIds(args.room).includes(args.guessActorId) || args.isGuessJudging) return;
-    if (guessSubmissionPendingRef.current) return true;
-    if (!isTimeout && args.turnSecondsLeft === 0 && args.room.turnTimeLimitSeconds > 0) return;
+    if (!args.room || !args.guessActorId || !args.room.accusedId || args.guessActorId !== args.room.accusedId || !normalizeWolfIds(args.room).includes(args.guessActorId)) return false;
     const room = args.room;
     const guess = args.guessInput.trim() || (isTimeout ? "時間切れ" : ""); if (!guess) return false;
-    guessSubmissionPendingRef.current = true;
     args.setIsGuessJudging(true); args.setGuessFeedbackMessage("");
-    try { const result = await submitWordWolfGuessCommand(room, guess, crypto.randomUUID()); args.setGuessInput(""); args.acceptRoom(result.room); return true; }
-    catch {
+    const result = await args.actionWindow.dispatchManual({
+      actionKey: `submit-wolf-guess:${args.guessActorId}`,
+      execute: () => submitWordWolfGuessCommand(room, guess, crypto.randomUUID()),
+      classifyError: wordWolfCommandErrorDisposition,
+    });
+    try {
+      if (result.kind === "accepted") {
+        args.setGuessInput("");
+        args.acceptRoom(result.value.room);
+        return true;
+      }
+      if (result.kind === "duplicate") return true;
+      if (result.kind === "closed") return false;
       const latest = await loadRoomFromStore(room.code);
       if (latest) args.acceptRoom(latest);
       if (latest?.phase === "result" && latest.wolfGuess) {
@@ -104,10 +125,13 @@ export function useWordWolfGameActions(args: Args) {
         args.setError("");
         return true;
       }
-      args.setError("逆転回答を判定できませんでした。もう一度試してください。");
+      args.setError(result.kind === "authoritative-expired"
+        ? "逆転回答の受付期限を過ぎたため、サーバーの最新状態を読み込みました。"
+        : "逆転回答を判定できませんでした。もう一度試してください。");
       return false;
+    } finally {
+      args.setIsGuessJudging(false);
     }
-    finally { guessSubmissionPendingRef.current = false; args.setIsGuessJudging(false); }
   }, [args]);
   useEffect(() => {
     const room = args.room;
@@ -121,7 +145,7 @@ export function useWordWolfGameActions(args: Args) {
     if (timeoutActionKeyRef.current === key) return; timeoutActionKeyRef.current = key;
     const timer = window.setTimeout(() => {
       const submitDraft = room.phase === "clue" && args.clueInput.trim()
-        ? submitClue(true)
+        ? submitClue()
         : room.phase === "wolfGuess" && args.guessInput.trim()
           ? submitWolfGuess(true)
           : Promise.resolve(false);

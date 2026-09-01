@@ -21,7 +21,7 @@ import {
 } from "@/lib/nigoichi";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
-import { synchronizedNow } from "@/lib/server-clock";
+import { useGameplayActionWindow } from "@/app/hooks/use-gameplay-action-window";
 
 const lastRoomKey = "nigoichi-last-room";
 const ownerIdKey = "nigoichi-owner-id";
@@ -63,6 +63,7 @@ export function useNigoichiController() {
   const [newPlayerCapacity, setNewPlayerCapacity] = useState(3);
   const [associationDrafts, setAssociationDrafts] = useState<Record<string, string[]>>({});
   const timeoutAssociationKeyRef = useRef("");
+  const timeoutExpiryKeyRef = useRef("");
   const [guessSelection, setGuessSelection] = useState<{ roundKey: string; number: number } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -109,12 +110,43 @@ export function useNigoichiController() {
     return room.players.filter((player) => player.id === playerId || (room.debugMode && isHost && player.isDummy));
   }, [isHost, playerId, room]);
 
+  const timerPhaseStartedAt = room?.phaseStartedAt;
+  const timerDurationSeconds = room?.phase === "clue"
+    ? room.clueTimeLimitSeconds
+    : room?.phase === "guess"
+      ? room.guessTimeLimitSeconds
+      : 0;
+  const timerClaimDelayMs = room ? clientTimeoutClaimDelayMs({ playerId, hostId: room.hostId, playerIds: room.players.map((player) => player.id) }) : 0;
+  const timerDeadlineAt = timerPhaseStartedAt && timerDurationSeconds > 0
+    ? timerPhaseStartedAt + timerDurationSeconds * 1_000
+    : null;
+  const actionWindow = useGameplayActionWindow({
+    plan: room && roomPhase
+      ? {
+          scope: { roomCode: room.code, generation: `${room.gameNumber}:${timerPhaseStartedAt ?? 0}`, phase: roomPhase },
+          countdownDeadlineAt: timerDeadlineAt,
+          serverDeadlineAt: timerDeadlineAt === null ? null : timerDeadlineAt + commonGameTimeoutGraceMs(),
+        }
+      : null,
+  });
+  const dispatchManual = actionWindow.dispatchManual;
+
   const runAction = useCallback(async (action: NigoichiRoomAction) => {
-    if (!room || isSaving) return null;
+    const associationActionKey = action.type === "submit-associations" || action.type === "submit-timeout-associations"
+      ? `submit-associations:${action.playerId}`
+      : null;
+    if (!room || (!associationActionKey && isSaving)) return null;
     setIsSaving(true);
     setError("");
     try {
-      const saved = await applyNigoichiRoomAction(room.code, action);
+      const saved = associationActionKey
+        ? await dispatchManual({
+            actionKey: associationActionKey,
+            execute: () => applyNigoichiRoomAction(room.code, action),
+            classifyError: () => "ambiguous",
+          }).then((result) => result.kind === "accepted" ? result.value : null)
+        : await applyNigoichiRoomAction(room.code, action);
+      if (!saved) return null;
       setRoom((current) => preferLatestOnlineRoom(current, saved));
       return saved;
     } catch (caught) {
@@ -123,45 +155,36 @@ export function useNigoichiController() {
     } finally {
       setIsSaving(false);
     }
-  }, [isSaving, room]);
+  }, [dispatchManual, isSaving, room]);
   useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: () => runAction({ type: "confirm-lobby-return", actorId: playerId }) });
 
-  const timerPhaseStartedAt = room?.phaseStartedAt;
-  const timerDurationSeconds = room?.phase === "clue"
-    ? room.clueTimeLimitSeconds
-    : room?.phase === "guess"
-      ? room.guessTimeLimitSeconds
-      : 0;
-  const timerClaimDelayMs = room ? clientTimeoutClaimDelayMs({ playerId, hostId: room.hostId, playerIds: room.players.map((player) => player.id) }) : 0;
-
   useEffect(() => {
-    if (!roomCode || !playerId || !timerPhaseStartedAt || timerDurationSeconds <= 0 || !roomPhase || !["clue", "guess"].includes(roomPhase)) return;
+    if (!roomCode || !playerId || !timerPhaseStartedAt || timerDurationSeconds <= 0 || !roomPhase || !["clue", "guess"].includes(roomPhase) || actionWindow.state !== "CLOSED") return;
+    const key = `${roomCode}:${roomPhase}:${timerPhaseStartedAt}`;
+    if (timeoutExpiryKeyRef.current === key) return;
+    timeoutExpiryKeyRef.current = key;
     const timer = window.setTimeout(() => {
       void applyNigoichiRoomAction(roomCode, { type: "expire-phase", actorId: playerId, phaseStartedAt: timerPhaseStartedAt })
         .then((saved) => setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current))
         .catch(() => undefined);
-    }, Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 + commonGameTimeoutGraceMs() - synchronizedNow()) + 100 + timerClaimDelayMs);
+    }, 100 + timerClaimDelayMs);
     return () => window.clearTimeout(timer);
-  }, [playerId, roomCode, roomPhase, timerClaimDelayMs, timerDurationSeconds, timerPhaseStartedAt]);
+  }, [actionWindow.state, playerId, roomCode, roomPhase, timerClaimDelayMs, timerDurationSeconds, timerPhaseStartedAt]);
 
   useEffect(() => {
-    if (!room || room.phase !== "clue" || !room.phaseStartedAt || room.clueTimeLimitSeconds <= 0 || room.associations[playerId]) return;
+    if (!room || room.phase !== "clue" || !room.phaseStartedAt || room.clueTimeLimitSeconds <= 0 || room.associations[playerId] || actionWindow.remainingSeconds !== 0) return;
     const clues = Array.from({ length: room.associationWordCount }, (_, index) => associationDrafts[playerId]?.[index] ?? "");
     if (!clues.some((clue) => clue.trim())) return;
     const key = `${room.code}:${room.gameNumber}:${room.phaseStartedAt}:${playerId}`;
-    const delay = Math.max(0, room.phaseStartedAt + room.clueTimeLimitSeconds * 1000 - synchronizedNow());
-    const timer = window.setTimeout(() => {
-      if (timeoutAssociationKeyRef.current === key) return;
-      timeoutAssociationKeyRef.current = key;
-      void applyNigoichiRoomAction(room.code, { type: "submit-timeout-associations", actorId: playerId, playerId, clues })
-        .then((saved) => {
-          setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current);
-          setAssociationDrafts((current) => { const next = { ...current }; delete next[playerId]; return next; });
-        })
-        .catch(() => undefined);
-    }, delay);
-    return () => window.clearTimeout(timer);
-  }, [associationDrafts, playerId, room]);
+    if (timeoutAssociationKeyRef.current === key) return;
+    timeoutAssociationKeyRef.current = key;
+    void runAction({ type: "submit-timeout-associations", actorId: playerId, playerId, clues })
+      .then((saved) => {
+        if (!saved) return;
+        setAssociationDrafts((current) => { const next = { ...current }; delete next[playerId]; return next; });
+      })
+      .catch(() => undefined);
+  }, [actionWindow.remainingSeconds, associationDrafts, playerId, room, runAction]);
 
   const createRoom = async () => {
     if (!session?.id || isSaving) return;

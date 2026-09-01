@@ -2,13 +2,39 @@ import type { Room, RoomChoice, WordWolfRoomAction } from "@/lib/wordwolf-game-t
 import { createWordWolfCommandScope, type WordWolfCommandType } from "@/lib/wordwolf-command-scope";
 import { createOnlineRoomApiClient } from "@/lib/online-room-api-client";
 import { aiActivityFetch } from "@/lib/ai-activity-client";
+import type { GameplayActionErrorDisposition } from "@/lib/gameplay-action-window";
 
 const endpoint = "/api/wordwolf/rooms";
 const roomApi = createOnlineRoomApiClient<Room, RoomChoice>({ endpoint });
 
-async function readJson<T>(response: Response, errorCode: string) {
-  if (!response.ok) throw new Error(errorCode);
-  return response.json() as Promise<T>;
+export class WordWolfCommandError extends Error {
+  constructor(
+    readonly code: string,
+    readonly status: number,
+    readonly payload: unknown,
+  ) {
+    super(code);
+  }
+}
+
+export function wordWolfCommandErrorDisposition(error: unknown): GameplayActionErrorDisposition {
+  if (error instanceof WordWolfCommandError && error.code === "WORDWOLF_COMMAND_AFTER_DEADLINE") {
+    return "authoritative-expired";
+  }
+  if (!(error instanceof WordWolfCommandError) || error.status >= 500) return "ambiguous";
+  return "retryable";
+}
+
+async function readJson<T>(response: Response, fallbackErrorCode: string) {
+  const payload = await response.json().catch(() => null) as ({ errorCode?: unknown } & Record<string, unknown>) | null;
+  if (!response.ok) {
+    throw new WordWolfCommandError(
+      typeof payload?.errorCode === "string" ? payload.errorCode : fallbackErrorCode,
+      response.status,
+      payload,
+    );
+  }
+  return payload as T;
 }
 
 export async function fetchWordWolfRoom(code: string) {

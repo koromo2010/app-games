@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getServerClockSnapshot,
   observeServerDate,
   resetServerClockForTests,
   subscribeServerClock,
@@ -69,5 +70,21 @@ test("missing/invalid/out-of-order server sampleを採用しない", () => {
   ), false);
   assert.equal(observations, 1);
   unsubscribe();
+  resetServerClockForTests();
+});
+
+test("sample freshnessはmissing/invalid/fresh/staleを区別する", () => {
+  resetServerClockForTests();
+  assert.equal(getServerClockSnapshot({ wallNow: 0, monotonicAt: 0 }).sampleState, "missing");
+  observeServerDate("invalid", 0, 0, 0);
+  assert.equal(getServerClockSnapshot({ wallNow: 0, monotonicAt: 0 }).sampleState, "invalid");
+  observeServerDate("Thu, 01 Jan 1970 00:00:20 GMT", 9_900, 10_100, 200);
+  const fresh = getServerClockSnapshot({ freshnessMs: 1_000, wallNow: 10_500, monotonicAt: 600 });
+  assert.equal(fresh.sampleState, "fresh");
+  assert.equal(fresh.serverNow, 21_000);
+  assert.equal(fresh.sampleAgeMs, 400);
+  const stale = getServerClockSnapshot({ freshnessMs: 1_000, wallNow: -9_000_000, monotonicAt: 1_201 });
+  assert.equal(stale.sampleState, "stale");
+  assert.equal(stale.serverNow, 21_601);
   resetServerClockForTests();
 });

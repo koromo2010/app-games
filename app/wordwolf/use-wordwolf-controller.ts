@@ -150,6 +150,7 @@ export function useWordWolfController() {
   const gameActions = useWordWolfGameActions({
     room,
     turnSecondsLeft: viewModel.turnSecondsLeft,
+    actionWindow: viewModel.actionWindow,
     clueActorId: viewModel.clueActorId,
     currentPlayerId: viewModel.currentPlayerId,
     voteActorId: viewModel.voteActor?.id ?? "",
