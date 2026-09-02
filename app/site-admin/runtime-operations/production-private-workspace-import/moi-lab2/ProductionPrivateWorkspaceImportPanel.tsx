@@ -6,8 +6,8 @@ import { productionPrivateWorkspaceImportTargetSpec } from "@/apps/sdk-portal/li
 import {
   diagnoseProductionPrivateWorkspaceImportTargetState,
   parseProductionPrivateWorkspaceImportExecute,
-  parseProductionPrivateWorkspaceImportPlan,
   parseProductionPrivateWorkspaceImportStatus,
+  requestProductionPrivateWorkspaceImportPlan,
   requestProductionPrivateWorkspaceImportTargetState,
   verifyProductionPrivateWorkspaceImportFile,
   type ProductionPrivateWorkspaceImportAcceptance,
@@ -180,26 +180,19 @@ export function ProductionPrivateWorkspaceImportPanel({
     setPlanLocked(true);
     setState("planning");
     setMessage("");
-    try {
-      const response = await fetch("/api/admin/sdk-production-private-workspace-import/moi-lab2/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/zip" },
-        body: verified.file,
-      });
-      const parsed = response.ok
-        ? parseProductionPrivateWorkspaceImportPlan(await payload(response), "moi-lab2", verified)
-        : null;
-      if (!parsed) {
-        setState("stopped");
-        setMessage("write-free planを安全に確認できません。planは再送しません。");
-        return;
-      }
-      setPlan(parsed);
-      setState("planned");
-    } catch {
+    const result = await requestProductionPrivateWorkspaceImportPlan("moi-lab2", verified);
+    if (result.kind === "transport-error") {
       setState("stopped");
       setMessage("write-free planの結果が不明です。planは再送しません。");
+      return;
     }
+    if (result.kind === "http-error" || result.kind === "contract-error") {
+      setState("stopped");
+      setMessage(`write-free planはHTTP ${result.status} / ${result.code}で停止しました。planは再送しません。`);
+      return;
+    }
+    setPlan(result.value);
+    setState("planned");
   };
 
   const reconcile = async (
