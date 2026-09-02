@@ -1,4 +1,4 @@
-import { normalizeAppLocale, type AppLocale } from "./app-locale.ts";
+import { isAppLocale, normalizeAppLocale, type AppLocale } from "./app-locale.ts";
 
 export type PlayerSession = {
   id?: string;
@@ -198,6 +198,29 @@ function notifyPlayerSessionChanged(locale?: AppLocale) {
   }));
 }
 
+function isOptionalBoolean(value: unknown) {
+  return value === undefined || typeof value === "boolean";
+}
+
+function isPersistentPlayerSession(value: unknown): value is PlayerSession {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const session = value as Partial<PlayerSession>;
+  return typeof session.id === "string"
+    && Boolean(session.id.trim())
+    && typeof session.name === "string"
+    && Boolean(session.name.trim())
+    && typeof session.avatarColor === "string"
+    && isAvatarColor(session.avatarColor)
+    && (session.avatarImage === null || (typeof session.avatarImage === "string" && isAvatarImage(session.avatarImage)))
+    && isOptionalBoolean(session.hasRecoveryEmail)
+    && isOptionalBoolean(session.hasUnverifiedRecoveryEmail)
+    && isOptionalBoolean(session.shareNameAllowed)
+    && (session.locale === undefined || isAppLocale(session.locale))
+    && (session.createdAt === undefined || (typeof session.createdAt === "number" && Number.isFinite(session.createdAt)))
+    && typeof session.updatedAt === "number"
+    && Number.isFinite(session.updatedAt);
+}
+
 export function clearPlayerSession() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(playerSessionKey);
@@ -220,8 +243,10 @@ export async function loadPersistentPlayerSession() {
     return null;
   }
 
-  const data = (await response.json()) as { session?: PlayerSession };
-  if (!data.session) return readPlayerSession();
+  const data = (await response.json()) as unknown;
+  if (!data || typeof data !== "object" || !("session" in data) || !isPersistentPlayerSession(data.session)) {
+    return null;
+  }
 
   savePlayerSession(data.session);
   markPlayerAuthenticated();

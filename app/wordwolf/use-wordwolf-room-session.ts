@@ -1,5 +1,6 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import { isPlayerAuthenticated, loadPersistentPlayerSession, readPlayerSession } from "@/lib/player-session";
+import { useOnlineGameSessionLoadOnce } from "@/app/hooks/use-online-game-session-restore";
+import { isPlayerAuthenticated, readPlayerSession } from "@/lib/player-session";
 import type { Room } from "@/lib/wordwolf-game-types";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "../hooks/use-online-room-polling";
 import { deleteRoom, getRoomKey, loadActiveRoomFromStore, loadRoomFromStore } from "./wordwolf-room-adapter";
@@ -21,21 +22,17 @@ type Args = {
 export function useWordWolfRoomSession(args: Args) {
   const [ready, setReady] = useState(false);
   const [isRestoringRoom, setIsRestoringRoom] = useState(false);
+  const loadSessionOnce = useOnlineGameSessionLoadOnce();
   useEffect(() => {
     let mounted = true;
     const timers: number[] = [];
     const defer = (callback: () => void) => timers.push(window.setTimeout(() => { if (mounted) callback(); }, 0));
-    if (!isPlayerAuthenticated()) {
-      defer(() => setReady(true));
-      return () => { mounted = false; timers.forEach((timer) => window.clearTimeout(timer)); };
-    }
-
-    const cachedSession = readPlayerSession();
+    const cachedSession = isPlayerAuthenticated() ? readPlayerSession() : null;
     const cachedRoomPromise = cachedSession?.id
       ? loadActiveRoomFromStore(cachedSession.id).catch(() => null)
       : Promise.resolve(null);
     defer(() => setIsRestoringRoom(true));
-    void loadPersistentPlayerSession().then(async (session) => {
+    void loadSessionOnce().then(async (session) => {
       if (!mounted || !session) return;
       const accountId = session.id ?? "";
       args.setPlayerName(session.name); args.setPlayerAccountId(accountId); args.setAvatarColor(session.avatarColor); args.setAvatarImage(session.avatarImage);
@@ -56,7 +53,7 @@ export function useWordWolfRoomSession(args: Args) {
     return () => { mounted = false; timers.forEach((timer) => window.clearTimeout(timer)); };
   // Initial session restore intentionally runs once; state setters are stable.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadSessionOnce]);
 
   const roomCode = args.room?.code;
   useOnlineRoomPolling({

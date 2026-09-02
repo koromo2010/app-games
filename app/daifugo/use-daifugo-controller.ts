@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { useOnlineGameSessionLoadOnce } from "@/app/hooks/use-online-game-session-restore";
 import { useAuthoritativeTimeoutFinalizer } from "@/app/hooks/use-authoritative-timeout-finalizer";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
@@ -13,7 +14,7 @@ import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-cli
 import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
 import { authoritativeTimerErrorDirective } from "@/lib/game-timer/retry";
 import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
-import { isPlayerAuthenticated, loadPersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
+import type { PlayerSession } from "@/lib/player-session";
 import { daifugoText, localizeDaifugoPlayError, type DaifugoCopy } from "./daifugo-i18n";
 
 const lastRoomKey = "daifugo-last-room";
@@ -51,22 +52,19 @@ export function useDaifugoController() {
   const [debugControlledPlayerId, setDebugControlledPlayerId] = useState("");
   const [saving, setSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const loadSessionOnce = useOnlineGameSessionLoadOnce();
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "result", onReturnUnavailable: () => setError(d.returnUnavailable) });
 
   useEffect(() => {
     let active = true;
-    if (!isPlayerAuthenticated()) {
-      const timer = window.setTimeout(() => { if (active) setReady(true); }, 0);
-      return () => { active = false; window.clearTimeout(timer); };
-    }
-    void loadPersistentPlayerSession().then(async (savedSession) => {
+    void loadSessionOnce().then(async (savedSession) => {
       if (!active || !savedSession?.id) return;
       setSession(savedSession);
       const savedRoom = await restoreOnlineRoom({ playerId: savedSession.id, lastCode: localStorage.getItem(lastRoomKey), fetchActiveRoom: daifugoRoomApi.fetchActiveRoom, fetchRoom: daifugoRoomApi.fetchRoom });
       if (active && savedRoom) setRoom(savedRoom);
     }).catch(() => undefined).finally(() => { if (active) setReady(true); });
     return () => { active = false; };
-  }, []);
+  }, [loadSessionOnce]);
 
   const playerId = session?.id ?? "";
   const roomCode = room?.code;

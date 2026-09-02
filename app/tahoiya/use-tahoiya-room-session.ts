@@ -1,5 +1,6 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import { defaultAvatarImage, loadPersistentPlayerSession, readPlayerSession } from "@/lib/player-session";
+import { useOnlineGameSessionLoadOnce } from "@/app/hooks/use-online-game-session-restore";
+import { defaultAvatarImage, isPlayerAuthenticated, readPlayerSession } from "@/lib/player-session";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "../hooks/use-online-room-polling";
@@ -15,18 +16,19 @@ export function useTahoiyaRoomSession(params: Params) {
   const { room, playerId, setRoom, setPlayerId, setActivePlayerId, setPlayerName, setAvatarColor, setAvatarImage } = params;
   const [ready, setReady] = useState(false);
   const [isRestoringRoom, setIsRestoringRoom] = useState(false);
+  const loadSessionOnce = useOnlineGameSessionLoadOnce();
   const resultReturnGate = useRoomResultReturnGate({ room: params.room, setRoom: params.setRoom, playerId: params.playerId, resultPhase: "result", onReturnUnavailable: () => params.setMessage("部屋が解散されたか、ホストにより退出扱いになりました。") });
   const roomCode = params.room?.code;
   const isWaitingForLobbyReturns = Boolean(room?.phase === "lobby" && room.lobbyReturn && !allRoomPlayersReturned(room.lobbyReturn, room.players));
   const isFollowingLobbyProgress = Boolean(room?.phase === "lobby" && room.topicGenerationProgress);
   useEffect(() => {
     let mounted = true;
-    const cachedSession = readPlayerSession();
+    const cachedSession = isPlayerAuthenticated() ? readPlayerSession() : null;
     const cachedRoomPromise = cachedSession?.id
       ? loadActiveRoomFromStore(cachedSession.id).catch(() => null)
       : Promise.resolve(null);
     const timer = window.setTimeout(() => { if (mounted) setIsRestoringRoom(true); }, 0);
-    void loadPersistentPlayerSession().then(async (session) => {
+    void loadSessionOnce().then(async (session) => {
       if (!mounted || !session) return; const id = session.id ?? ""; setPlayerId(id); setActivePlayerId(id); setPlayerName(session.name); setAvatarColor(session.avatarColor); setAvatarImage(session.avatarImage || defaultAvatarImage);
       if (!id) return;
       const activeRoom = cachedSession?.id === id ? await cachedRoomPromise : await loadActiveRoomFromStore(id);
@@ -37,7 +39,7 @@ export function useTahoiyaRoomSession(params: Params) {
       setReady(true);
     });
     return () => { mounted = false; window.clearTimeout(timer); };
-  }, [setActivePlayerId, setAvatarColor, setAvatarImage, setPlayerId, setPlayerName, setRoom]);
+  }, [loadSessionOnce, setActivePlayerId, setAvatarColor, setAvatarImage, setPlayerId, setPlayerName, setRoom]);
   useOnlineRoomPolling({ game: "tahoiya", roomCode: resultReturnGate.isRoomDissolved ? null : roomCode, intervalMs: isWaitingForLobbyReturns || isFollowingLobbyProgress ? onlineRoomPollingIntervals.realtime : onlineRoomPollingIntervals.active, fetchRoom: loadRoomFromStore, onRoom: resultReturnGate.acceptIncomingRoom, onMissing: () => { if (roomCode) deleteRoomLocally(roomCode); if (resultReturnGate.markRoomDissolved()) { params.setMessage("部屋が解散されたか、ホストにより退出扱いになりました。結果画面はこのまま確認できます。"); return; } params.setRoom(null); params.setMessage("部屋が解散されたか、退出扱いになりました。"); } });
   useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: async () => {
     if (!room) return null;
