@@ -150,6 +150,35 @@ export type ProductionPrivateWorkspaceImportPlan = {
   contentSetSha256: string;
 };
 
+export const productionPrivateWorkspaceImportPlanSafeErrorStatuses = Object.freeze({
+  ...productionPrivateWorkspaceImportTargetStateSafeErrorStatuses,
+  PRODUCTION_PRIVATE_IMPORT_BUNDLE_IDENTITY_MISMATCH: 400,
+  PRODUCTION_PRIVATE_IMPORT_CONTENT_INVALID: 400,
+  PRODUCTION_PRIVATE_IMPORT_INVARIANT_UNRESOLVED: 409,
+} as const);
+
+export type ProductionPrivateWorkspaceImportPlanSafeErrorCode =
+  keyof typeof productionPrivateWorkspaceImportPlanSafeErrorStatuses;
+
+export type ProductionPrivateWorkspaceImportPlanHttpFailure = {
+  status: number;
+  code: ProductionPrivateWorkspaceImportPlanSafeErrorCode;
+};
+
+export type ProductionPrivateWorkspaceImportPlanResponse =
+  | { kind: "success"; status: number; value: ProductionPrivateWorkspaceImportPlan }
+  | {
+    kind: "http-error";
+    status: number;
+    code: ProductionPrivateWorkspaceImportPlanSafeErrorCode | "SAFE_ERROR_UNAVAILABLE";
+  }
+  | {
+    kind: "contract-error";
+    status: number;
+    code: "PLAN_RESPONSE_CONTRACT_INVALID";
+  }
+  | { kind: "transport-error"; code: "PLAN_TRANSPORT_UNKNOWN" };
+
 export type ProductionPrivateWorkspaceImportAcceptance = {
   workspaceId: string;
   workspaceRows: 1;
@@ -534,6 +563,70 @@ export function parseProductionPrivateWorkspaceImportPlan(
     fileRows: mutations.privateFileRows as number,
     contentSetSha256: bundle.contentSetSha256,
   };
+}
+
+export function parseProductionPrivateWorkspaceImportPlanHttpFailure(
+  value: unknown,
+  status: number,
+): ProductionPrivateWorkspaceImportPlanHttpFailure | null {
+  const input = record(value);
+  if (
+    !input
+    || Object.keys(input).sort().join(",") !== "error"
+    || typeof input.error !== "string"
+    || !Object.prototype.hasOwnProperty.call(
+      productionPrivateWorkspaceImportPlanSafeErrorStatuses,
+      input.error,
+    )
+  ) return null;
+  const code = input.error as ProductionPrivateWorkspaceImportPlanSafeErrorCode;
+  return productionPrivateWorkspaceImportPlanSafeErrorStatuses[code] === status
+    ? { status, code }
+    : null;
+}
+
+export async function requestProductionPrivateWorkspaceImportPlan(
+  target: ProductionPrivateWorkspaceImportTarget,
+  verified: VerifiedProductionPrivateWorkspaceImportFile,
+  fetcher: typeof fetch = fetch,
+): Promise<ProductionPrivateWorkspaceImportPlanResponse> {
+  try {
+    const response = await fetcher(
+      `/api/admin/sdk-production-private-workspace-import/${encodeURIComponent(target)}/plan`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/zip" },
+        body: verified.file,
+      },
+    );
+    let responsePayload: Record<string, unknown> | null = null;
+    try {
+      responsePayload = record(await response.json());
+    } catch {
+      // A missing or non-JSON body is classified below without retrying or exposing it.
+    }
+    if (!response.ok) {
+      const failure = parseProductionPrivateWorkspaceImportPlanHttpFailure(
+        responsePayload,
+        response.status,
+      );
+      return {
+        kind: "http-error",
+        status: response.status,
+        code: failure?.code ?? "SAFE_ERROR_UNAVAILABLE",
+      };
+    }
+    const parsed = parseProductionPrivateWorkspaceImportPlan(responsePayload, target, verified);
+    return parsed
+      ? { kind: "success", status: response.status, value: parsed }
+      : {
+        kind: "contract-error",
+        status: response.status,
+        code: "PLAN_RESPONSE_CONTRACT_INVALID",
+      };
+  } catch {
+    return { kind: "transport-error", code: "PLAN_TRANSPORT_UNKNOWN" };
+  }
 }
 
 function acceptance(value: unknown, operationId: string): ProductionPrivateWorkspaceImportAcceptance | null {

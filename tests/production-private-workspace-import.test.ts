@@ -27,9 +27,12 @@ import {
 import { createStoredZip } from "../apps/sdk-portal/lib/stored-zip.ts";
 import {
   diagnoseProductionPrivateWorkspaceImportTargetState,
+  parseProductionPrivateWorkspaceImportPlanHttpFailure,
   parseProductionPrivateWorkspaceImportTargetStateHttpFailure,
   parseProductionPrivateWorkspaceImportTargetState,
+  productionPrivateWorkspaceImportPlanSafeErrorStatuses,
   productionPrivateWorkspaceImportTargetStateSafeErrorStatuses,
+  requestProductionPrivateWorkspaceImportPlan,
   requestProductionPrivateWorkspaceImportTargetState,
   verifyProductionPrivateWorkspaceImportFileAgainstSpec,
 } from "../lib/production-private-workspace-import-client.ts";
@@ -482,6 +485,145 @@ test("target-state HTTP diagnostics retain only exact reachable safe status/code
   ), null);
 });
 
+async function planResponseFixture(input: {
+  payload?: unknown;
+  status?: number;
+  jsonFailure?: boolean;
+  transportFailure?: boolean;
+}) {
+  const fixture = syntheticBundle();
+  const file = new File([fixture.archive], "moi-lab2.bundle.zip", { type: "application/zip" });
+  const verification = await verifyProductionPrivateWorkspaceImportFileAgainstSpec(
+    file,
+    "moi-lab2",
+    fixture.specs["moi-lab2"],
+  );
+  assert.equal(verification.kind, "verified");
+  if (verification.kind !== "verified") throw new Error("fixture verification failed");
+  const prepared = await prepareProductionPrivateWorkspaceImportPlan({
+    target: "moi-lab2",
+    archive: fixture.archive,
+    specs: fixture.specs,
+    adapter: memoryAdapter().adapter,
+  });
+  let fetchCalls = 0;
+  let jsonReads = 0;
+  const status = input.status ?? 200;
+  const fetcher = (async (request: RequestInfo | URL, init?: RequestInit) => {
+    fetchCalls += 1;
+    assert.equal(String(request), "/api/admin/sdk-production-private-workspace-import/moi-lab2/plan");
+    assert.equal(init?.method, "POST");
+    assert.deepEqual(init?.headers, { "Content-Type": "application/zip" });
+    assert.equal(init?.body, verification.value.file);
+    if (input.transportFailure) throw new Error("transport unavailable");
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => {
+        jsonReads += 1;
+        if (input.jsonFailure) throw new Error("non-json response");
+        return input.payload === undefined ? prepared.response : input.payload;
+      },
+    } as Response;
+  }) as typeof fetch;
+  const result = await requestProductionPrivateWorkspaceImportPlan(
+    "moi-lab2",
+    verification.value,
+    fetcher,
+  );
+  return { result, fetchCalls, jsonReads };
+}
+
+test("plan response keeps one POST/read, strict success, safe HTTP diagnostics, and no retry", async () => {
+  const success = await planResponseFixture({});
+  assert.equal(success.result.kind, "success");
+  assert.deepEqual({ fetchCalls: success.fetchCalls, jsonReads: success.jsonReads }, {
+    fetchCalls: 1,
+    jsonReads: 1,
+  });
+
+  const expiredStepUp = await planResponseFixture({
+    status: 403,
+    payload: { error: "ADMIN_STEP_UP_REQUIRED" },
+  });
+  assert.deepEqual(expiredStepUp, {
+    result: { kind: "http-error", status: 403, code: "ADMIN_STEP_UP_REQUIRED" },
+    fetchCalls: 1,
+    jsonReads: 1,
+  });
+
+  for (const payload of [
+    { error: "database connection failed: secret detail" },
+    { error: "ADMIN_STEP_UP_REQUIRED", detail: "must not escape" },
+  ]) {
+    const hidden = await planResponseFixture({ status: 403, payload });
+    assert.deepEqual(hidden.result, {
+      kind: "http-error",
+      status: 403,
+      code: "SAFE_ERROR_UNAVAILABLE",
+    });
+    assert.doesNotMatch(JSON.stringify(hidden.result), /database|secret|detail|must not escape/);
+  }
+
+  const wrongStatus = await planResponseFixture({
+    status: 503,
+    payload: { error: "ADMIN_STEP_UP_REQUIRED" },
+  });
+  assert.deepEqual(wrongStatus.result, {
+    kind: "http-error",
+    status: 503,
+    code: "SAFE_ERROR_UNAVAILABLE",
+  });
+
+  const malformedSuccess = await planResponseFixture({
+    status: 200,
+    payload: { schemaVersion: 1, secret: "must not escape" },
+  });
+  assert.deepEqual(malformedSuccess.result, {
+    kind: "contract-error",
+    status: 200,
+    code: "PLAN_RESPONSE_CONTRACT_INVALID",
+  });
+
+  const unreadable = await planResponseFixture({ status: 502, jsonFailure: true });
+  assert.deepEqual(unreadable, {
+    result: { kind: "http-error", status: 502, code: "SAFE_ERROR_UNAVAILABLE" },
+    fetchCalls: 1,
+    jsonReads: 1,
+  });
+
+  const transport = await planResponseFixture({ transportFailure: true });
+  assert.deepEqual(transport, {
+    result: { kind: "transport-error", code: "PLAN_TRANSPORT_UNKNOWN" },
+    fetchCalls: 1,
+    jsonReads: 0,
+  });
+});
+
+test("plan HTTP diagnostics expose only exact reachable status/code pairs", () => {
+  assert.deepEqual(parseProductionPrivateWorkspaceImportPlanHttpFailure(
+    { error: "ADMIN_STEP_UP_REQUIRED" },
+    403,
+  ), { status: 403, code: "ADMIN_STEP_UP_REQUIRED" });
+  assert.deepEqual(parseProductionPrivateWorkspaceImportPlanHttpFailure(
+    { error: "PRODUCTION_PRIVATE_IMPORT_BUNDLE_IDENTITY_MISMATCH" },
+    400,
+  ), { status: 400, code: "PRODUCTION_PRIVATE_IMPORT_BUNDLE_IDENTITY_MISMATCH" });
+  assert.deepEqual(parseProductionPrivateWorkspaceImportPlanHttpFailure(
+    { error: "PRODUCTION_PRIVATE_IMPORT_INVARIANT_UNRESOLVED" },
+    409,
+  ), { status: 409, code: "PRODUCTION_PRIVATE_IMPORT_INVARIANT_UNRESOLVED" });
+  assert.equal(productionPrivateWorkspaceImportPlanSafeErrorStatuses.ADMIN_STEP_UP_REQUIRED, 403);
+  assert.equal(parseProductionPrivateWorkspaceImportPlanHttpFailure(
+    { error: "PRODUCTION_PRIVATE_IMPORT_INVARIANT_UNRESOLVED" },
+    503,
+  ), null);
+  assert.equal(parseProductionPrivateWorkspaceImportPlanHttpFailure(
+    { error: "UNKNOWN_SAFE_LOOKING_CODE" },
+    503,
+  ), null);
+});
+
 test("the Production operation ID is deterministic and never reuses consumed Development IDs", () => {
   const fixture = syntheticBundle();
   const bundle = validateProductionPrivateWorkspaceBundle({ target: "moi-lab2", archive: fixture.archive, specs: fixture.specs });
@@ -587,8 +729,8 @@ test("preparation UI has no upload POST controls and execution has single plan/e
   assert.match(panel, /execute POSTは再送しません/);
   assert.match(panel, /data-production-private-import-target-failures/);
   assert.match(panel, /setTargetState\(parsed\)/);
-  assert.equal((panel.match(/method: "POST"/g) ?? []).length, 2);
-  assert.equal((panel.match(/body: verified\.file/g) ?? []).length, 2);
+  assert.equal((panel.match(/method: "POST"/g) ?? []).length, 1);
+  assert.equal((panel.match(/body: verified\.file/g) ?? []).length, 1);
   assert.match(panel, /requestProductionPrivateWorkspaceImportTargetState\("moi-lab2"\)/);
   const targetRead = panel.slice(panel.indexOf("const checkTarget"), panel.indexOf("const requestPlan"));
   assert.match(targetRead, /targetStateUsed\.current = true/);
@@ -606,4 +748,33 @@ test("preparation UI has no upload POST controls and execution has single plan/e
   assert.match(targetRequest, /method: "GET", cache: "no-store"/);
   assert.doesNotMatch(targetRequest, /method: "POST"/);
   assert.doesNotMatch(targetRequest, /body:/);
+
+  const planUi = panel.slice(panel.indexOf("const requestPlan"), panel.indexOf("const reconcile"));
+  assert.match(planUi, /planUsed\.current = true/);
+  assert.match(planUi, /requestProductionPrivateWorkspaceImportPlan\("moi-lab2", verified\)/);
+  assert.match(planUi, /result\.kind === "transport-error"/);
+  assert.match(planUi, /result\.kind === "http-error" \|\| result\.kind === "contract-error"/);
+  assert.match(planUi, /HTTP \$\{result\.status\} \/ \$\{result\.code\}/);
+  assert.doesNotMatch(planUi, /fetch\(|await payload\(/);
+
+  const planRequestStart = client.indexOf("export async function requestProductionPrivateWorkspaceImportPlan");
+  const planRequest = client.slice(planRequestStart, client.indexOf("function acceptance", planRequestStart));
+  assert.equal((planRequest.match(/fetcher\(/g) ?? []).length, 1);
+  assert.equal((planRequest.match(/response\.json\(\)/g) ?? []).length, 1);
+  assert.match(planRequest, /method: "POST"/);
+  assert.match(planRequest, /body: verified\.file/);
+});
+
+test("plan authorization stops before body read, SDK transfer, or any import state access", () => {
+  const route = readFileSync(
+    "app/api/admin/sdk-production-private-workspace-import/[target]/plan/route.ts",
+    "utf8",
+  );
+  const authorization = route.indexOf("await requireRecentSiteAdminMfa()");
+  const bodyRead = route.indexOf("await readProductionPrivateWorkspaceImportBody");
+  const sdkTransfer = route.indexOf("await fetch(url");
+  assert.ok(authorization >= 0);
+  assert.ok(bodyRead > authorization);
+  assert.ok(sdkTransfer > bodyRead);
+  assert.doesNotMatch(route.slice(0, bodyRead), /productionPrivateWorkspaceImportStore|\.insert\(|\.update\(|\.delete\(/);
 });
