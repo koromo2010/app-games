@@ -5,12 +5,13 @@ import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 import { productionPrivateWorkspaceImportTargetSpec } from "@/apps/sdk-portal/lib/production-private-workspace-import-public-contract";
 import {
   diagnoseProductionPrivateWorkspaceImportTargetState,
-  parseProductionPrivateWorkspaceImportExecute,
   parseProductionPrivateWorkspaceImportStatus,
+  requestProductionPrivateWorkspaceImportExecute,
   requestProductionPrivateWorkspaceImportPlan,
   requestProductionPrivateWorkspaceImportTargetState,
   verifyProductionPrivateWorkspaceImportFile,
   type ProductionPrivateWorkspaceImportAcceptance,
+  type ProductionPrivateWorkspaceImportExecuteResponse,
   type ProductionPrivateWorkspaceImportPlan,
   type ProductionPrivateWorkspaceImportTargetState,
   type VerifiedProductionPrivateWorkspaceImportFile,
@@ -198,6 +199,7 @@ export function ProductionPrivateWorkspaceImportPanel({
   const reconcile = async (
     selected: VerifiedProductionPrivateWorkspaceImportFile,
     prepared: ProductionPrivateWorkspaceImportPlan,
+    execution: ProductionPrivateWorkspaceImportExecuteResponse,
   ) => {
     setState("reconciling");
     try {
@@ -223,9 +225,14 @@ export function ProductionPrivateWorkspaceImportPanel({
         return;
       }
       setState("stopped");
-      setMessage(response.status === 404 && parsed?.state === "not-found"
-        ? "completed receiptは観測されていません。execute POSTは再送しません。"
-        : "read-only statusを安全に確認できません。execute POSTは再送しません。");
+      if (response.status === 404 && parsed?.state === "not-found") {
+        const diagnostic = execution.kind === "transport-error"
+          ? execution.code
+          : `HTTP ${execution.status} / ${execution.kind === "success" ? "EXECUTE_COMPLETED" : execution.code}`;
+        setMessage(`executeは${diagnostic}で停止し、completed receiptは観測されていません。execute POSTは再送しません。`);
+      } else {
+        setMessage("read-only statusを安全に確認できません。execute POSTは再送しません。");
+      }
     } catch {
       setState("stopped");
       setMessage("read-only status結果が不明です。execute POSTは再送しません。");
@@ -238,23 +245,8 @@ export function ProductionPrivateWorkspaceImportPanel({
     setExecuteLocked(true);
     setState("executing");
     setMessage("");
-    try {
-      const response = await fetch("/api/admin/sdk-production-private-workspace-import/moi-lab2/execute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/zip",
-          "X-Game-Fields-Production-Private-Import-Operation-Id": verified.operationId,
-          "X-Game-Fields-Production-Private-Import-Plan-Receipt": plan.planReceipt,
-        },
-        body: verified.file,
-      });
-      if (response.ok) parseProductionPrivateWorkspaceImportExecute(
-        await payload(response), "moi-lab2", verified.operationId,
-      );
-    } catch {
-      // Reconciliation below is the only follow-up; execute is never retried.
-    }
-    await reconcile(verified, plan);
+    const execution = await requestProductionPrivateWorkspaceImportExecute("moi-lab2", verified, plan);
+    await reconcile(verified, plan, execution);
   };
 
   if (initialAccess === "step-up-required") return (

@@ -179,6 +179,35 @@ export type ProductionPrivateWorkspaceImportPlanResponse =
   }
   | { kind: "transport-error"; code: "PLAN_TRANSPORT_UNKNOWN" };
 
+export const productionPrivateWorkspaceImportExecuteSafeErrorStatuses = Object.freeze({
+  ...productionPrivateWorkspaceImportPlanSafeErrorStatuses,
+  PRODUCTION_PRIVATE_IMPORT_PLAN_RECEIPT_MISMATCH: 409,
+  PRODUCTION_PRIVATE_IMPORT_OPERATION_CONFLICT: 409,
+  PRODUCTION_PRIVATE_IMPORT_CONCURRENT_CHANGE: 409,
+} as const);
+
+export type ProductionPrivateWorkspaceImportExecuteSafeErrorCode =
+  keyof typeof productionPrivateWorkspaceImportExecuteSafeErrorStatuses;
+
+export type ProductionPrivateWorkspaceImportExecuteHttpFailure = {
+  status: number;
+  code: ProductionPrivateWorkspaceImportExecuteSafeErrorCode;
+};
+
+export type ProductionPrivateWorkspaceImportExecuteResponse =
+  | { kind: "success"; status: number; terminalReceipt: string }
+  | {
+    kind: "http-error";
+    status: number;
+    code: ProductionPrivateWorkspaceImportExecuteSafeErrorCode | "SAFE_ERROR_UNAVAILABLE";
+  }
+  | {
+    kind: "contract-error";
+    status: number;
+    code: "EXECUTE_RESPONSE_CONTRACT_INVALID";
+  }
+  | { kind: "transport-error"; code: "EXECUTE_TRANSPORT_UNKNOWN" };
+
 export type ProductionPrivateWorkspaceImportAcceptance = {
   workspaceId: string;
   workspaceRows: 1;
@@ -686,4 +715,77 @@ export function parseProductionPrivateWorkspaceImportExecute(
     || typeof input.terminalReceipt !== "string" || !sha256Pattern.test(input.terminalReceipt)
   ) return null;
   return { operationId, terminalReceipt: input.terminalReceipt };
+}
+
+export function parseProductionPrivateWorkspaceImportExecuteHttpFailure(
+  value: unknown,
+  status: number,
+): ProductionPrivateWorkspaceImportExecuteHttpFailure | null {
+  const input = record(value);
+  if (
+    !input
+    || Object.keys(input).sort().join(",") !== "error"
+    || typeof input.error !== "string"
+    || !Object.prototype.hasOwnProperty.call(
+      productionPrivateWorkspaceImportExecuteSafeErrorStatuses,
+      input.error,
+    )
+  ) return null;
+  const code = input.error as ProductionPrivateWorkspaceImportExecuteSafeErrorCode;
+  return productionPrivateWorkspaceImportExecuteSafeErrorStatuses[code] === status
+    ? { status, code }
+    : null;
+}
+
+export async function requestProductionPrivateWorkspaceImportExecute(
+  target: ProductionPrivateWorkspaceImportTarget,
+  verified: VerifiedProductionPrivateWorkspaceImportFile,
+  plan: ProductionPrivateWorkspaceImportPlan,
+  fetcher: typeof fetch = fetch,
+): Promise<ProductionPrivateWorkspaceImportExecuteResponse> {
+  try {
+    const response = await fetcher(
+      `/api/admin/sdk-production-private-workspace-import/${encodeURIComponent(target)}/execute`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/zip",
+          "X-Game-Fields-Production-Private-Import-Operation-Id": verified.operationId,
+          "X-Game-Fields-Production-Private-Import-Plan-Receipt": plan.planReceipt,
+        },
+        body: verified.file,
+      },
+    );
+    let responsePayload: Record<string, unknown> | null = null;
+    try {
+      responsePayload = record(await response.json());
+    } catch {
+      // A missing or non-JSON body is classified below without retrying or exposing it.
+    }
+    if (!response.ok) {
+      const failure = parseProductionPrivateWorkspaceImportExecuteHttpFailure(
+        responsePayload,
+        response.status,
+      );
+      return {
+        kind: "http-error",
+        status: response.status,
+        code: failure?.code ?? "SAFE_ERROR_UNAVAILABLE",
+      };
+    }
+    const parsed = parseProductionPrivateWorkspaceImportExecute(
+      responsePayload,
+      target,
+      verified.operationId,
+    );
+    return parsed
+      ? { kind: "success", status: response.status, terminalReceipt: parsed.terminalReceipt }
+      : {
+        kind: "contract-error",
+        status: response.status,
+        code: "EXECUTE_RESPONSE_CONTRACT_INVALID",
+      };
+  } catch {
+    return { kind: "transport-error", code: "EXECUTE_TRANSPORT_UNKNOWN" };
+  }
 }

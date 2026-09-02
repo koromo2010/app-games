@@ -16,6 +16,21 @@ import { sdkSql } from "./sdk-postgres.ts";
 
 type SnapshotRow = Record<string, unknown>;
 
+export const productionPrivateWorkspaceImportEmptyUnrelatedPrivateStateText = ["", "", "", ""].join("||");
+
+const unrelatedPrivateStateTextSql = `concat_ws('||',
+  COALESCE((SELECT string_agg(row_to_json(r)::TEXT, ',' ORDER BY operation_id)
+    FROM sdk_production_private_workspace_import_operations r WHERE target_key <> $1), ''),
+  COALESCE((SELECT string_agg(row_to_json(r)::TEXT, ',' ORDER BY workspace_id)
+    FROM sdk_production_private_workspaces r WHERE target_key <> $1), ''),
+  COALESCE((SELECT string_agg(row_to_json(r)::TEXT, ',' ORDER BY workspace_id, game_id)
+    FROM sdk_production_private_workspace_games r
+    WHERE workspace_id IN (SELECT workspace_id FROM sdk_production_private_workspaces WHERE target_key <> $1)), ''),
+  COALESCE((SELECT string_agg(concat_ws('|', workspace_id::TEXT, game_id, path, byte_length::TEXT, content_sha256), ','
+    ORDER BY workspace_id, game_id, path) FROM sdk_production_private_workspace_files
+    WHERE workspace_id IN (SELECT workspace_id FROM sdk_production_private_workspaces WHERE target_key <> $1)), '')
+)`;
+
 function count(value: unknown) {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : -1;
@@ -139,18 +154,7 @@ export async function readProductionPrivateWorkspaceImportBeforeState(
         target_workspaces AS MATERIALIZED (
           SELECT * FROM sdk_production_private_workspaces WHERE target_key = $1
         ), unrelated_private_text AS (
-          SELECT concat_ws('||',
-            COALESCE((SELECT string_agg(row_to_json(r)::TEXT, ',' ORDER BY operation_id)
-              FROM sdk_production_private_workspace_import_operations r WHERE target_key <> $1), ''),
-            COALESCE((SELECT string_agg(row_to_json(r)::TEXT, ',' ORDER BY workspace_id)
-              FROM sdk_production_private_workspaces r WHERE target_key <> $1), ''),
-            COALESCE((SELECT string_agg(row_to_json(r)::TEXT, ',' ORDER BY workspace_id, game_id)
-              FROM sdk_production_private_workspace_games r
-              WHERE workspace_id IN (SELECT workspace_id FROM sdk_production_private_workspaces WHERE target_key <> $1)), ''),
-            COALESCE((SELECT string_agg(concat_ws('|', workspace_id::TEXT, game_id, path, byte_length::TEXT, content_sha256), ','
-              ORDER BY workspace_id, game_id, path) FROM sdk_production_private_workspace_files
-              WHERE workspace_id IN (SELECT workspace_id FROM sdk_production_private_workspaces WHERE target_key <> $1)), '')
-          ) AS value
+          SELECT ${unrelatedPrivateStateTextSql} AS value
         )
       `, `
         (SELECT COUNT(*) FROM target_workspaces)::INTEGER AS "targetWorkspaceRows",
@@ -159,7 +163,9 @@ export async function readProductionPrivateWorkspaceImportBeforeState(
         (SELECT COUNT(*) FROM sdk_production_private_workspace_files
           WHERE workspace_id IN (SELECT workspace_id FROM target_workspaces))::INTEGER AS "targetWorkspaceFileRows"
       `)
-    : selectSnapshot(`unrelated_private_text AS (SELECT ''::TEXT AS value)`, `
+    : selectSnapshot(`unrelated_private_text AS (
+        SELECT '${productionPrivateWorkspaceImportEmptyUnrelatedPrivateStateText}'::TEXT AS value
+      )`, `
         0::INTEGER AS "targetWorkspaceRows",
         0::INTEGER AS "targetWorkspaceGameRows",
         0::INTEGER AS "targetWorkspaceFileRows"
@@ -321,18 +327,7 @@ export async function importProductionPrivateWorkspaceAtomic(
         COALESCE((SELECT string_agg(row_to_json(r)::TEXT, ',' ORDER BY id) FROM sdk_oauth_grants r), '')
       ) AS value
     ), unrelated_private_text AS (
-      SELECT concat_ws('||',
-        COALESCE((SELECT string_agg(row_to_json(r)::TEXT, ',' ORDER BY operation_id)
-          FROM sdk_production_private_workspace_import_operations r WHERE target_key <> $1), ''),
-        COALESCE((SELECT string_agg(row_to_json(r)::TEXT, ',' ORDER BY workspace_id)
-          FROM sdk_production_private_workspaces r WHERE target_key <> $1), ''),
-        COALESCE((SELECT string_agg(row_to_json(r)::TEXT, ',' ORDER BY workspace_id, game_id)
-          FROM sdk_production_private_workspace_games r
-          WHERE workspace_id IN (SELECT workspace_id FROM sdk_production_private_workspaces WHERE target_key <> $1)), ''),
-        COALESCE((SELECT string_agg(concat_ws('|', workspace_id::TEXT, game_id, path, byte_length::TEXT, content_sha256), ','
-          ORDER BY workspace_id, game_id, path) FROM sdk_production_private_workspace_files
-          WHERE workspace_id IN (SELECT workspace_id FROM sdk_production_private_workspaces WHERE target_key <> $1)), '')
-      ) AS value
+      SELECT ${unrelatedPrivateStateTextSql} AS value
     ), shape AS MATERIALIZED (
       SELECT
         (SELECT id::TEXT FROM target_creators ORDER BY id LIMIT 1) AS creator_id,
