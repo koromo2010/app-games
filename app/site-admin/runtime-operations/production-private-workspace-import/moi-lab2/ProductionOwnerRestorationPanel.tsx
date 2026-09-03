@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+const fixedProductionAccountFingerprint = "opf_v1_QTP2zsdJ7Z6c6vgDTPI03XbqOJgsiJfzrGrs2D6L-nM";
+
 type AccountProjection = {
   schemaVersion: 1;
   environment: "production" | "development";
@@ -53,7 +55,7 @@ function parseAccount(value: unknown): AccountProjection | null {
   return v as AccountProjection;
 }
 
-function parsePlan(value: unknown, account: AccountProjection): OwnerBindingPlan | null {
+function parsePlan(value: unknown, account: AccountProjection | null): OwnerBindingPlan | null {
   const v = object(value); const wi = object(v?.workspaceIdentity); const counts = object(v?.counts);
   const effect = object(v?.plannedEffect); const non = object(v?.nonEffects);
   if (!v || !wi || !counts || !effect || !non) return null;
@@ -62,9 +64,12 @@ function parsePlan(value: unknown, account: AccountProjection): OwnerBindingPlan
     || !exactKeys(counts, ["workspaces", "games", "runtimeFiles"])
     || !exactKeys(effect, ["ownerBindings", "ownerUsername", "visibilityAfter", "quarantinedAfter", "publicAfter"])
     || !exactKeys(non, ["grants", "releases", "publications", "aliases", "rooms"])) return null;
-  if (v.schemaVersion !== 1 || v.environment !== account.environment || v.phase !== "write-free-owner-binding-plan"
+  if (v.schemaVersion !== 1 || (v.environment !== "production" && v.environment !== "development")
+    || (account && v.environment !== account.environment) || v.phase !== "write-free-owner-binding-plan"
     || v.target !== "moi-lab2" || v.selectionBasis !== "OPERATOR_SELECTED_RESTORATION_TARGET"
-    || v.username !== "moi" || v.accountFingerprint !== account.fingerprint
+    || v.username !== "moi" || typeof v.accountFingerprint !== "string" || !fingerprintPattern.test(v.accountFingerprint)
+    || (v.environment === "production" && v.accountFingerprint !== fixedProductionAccountFingerprint)
+    || (account && v.accountFingerprint !== account.fingerprint)
     || wi.operationId !== "06eb6940-f624-59b0-8d00-47eba9a9cec8"
     || typeof wi.bundleSha256 !== "string" || !sha256Pattern.test(wi.bundleSha256)
     || typeof wi.workspaceManifestSha256 !== "string" || !sha256Pattern.test(wi.workspaceManifestSha256)
@@ -80,6 +85,25 @@ function parsePlan(value: unknown, account: AccountProjection): OwnerBindingPlan
 }
 
 async function json(response: Response) { try { return await response.json(); } catch { return null; } }
+
+const safePlanErrorCodes = new Set([
+  "OWNER_RESTORATION_ACCOUNT_NOT_FOUND",
+  "OWNER_RESTORATION_ACCOUNT_AMBIGUOUS",
+  "OWNER_RESTORATION_ACCOUNT_FINGERPRINT_CHANGED",
+  "OWNER_RESTORATION_INTERNAL_AUTH_REJECTED",
+  "OWNER_RESTORATION_WORKSPACE_NOT_FOUND",
+  "OWNER_RESTORATION_WORKSPACE_UNAVAILABLE",
+  "OWNER_RESTORATION_WORKSPACE_RESPONSE_INVALID",
+  "OWNER_RESTORATION_PLAN_INPUT_INVALID",
+  "OWNER_RESTORATION_PLAN_UNAVAILABLE",
+]);
+
+function safePlanError(value: unknown) {
+  const v = object(value);
+  return v && typeof v.error === "string" && safePlanErrorCodes.has(v.error)
+    ? v.error
+    : "OWNER_RESTORATION_PLAN_UNAVAILABLE";
+}
 
 export function ProductionOwnerRestorationPanel() {
   const [account, setAccount] = useState<AccountProjection | null>(null);
@@ -100,27 +124,36 @@ export function ProductionOwnerRestorationPanel() {
   };
 
   const readPlan = async () => {
-    if (!account || planLocked) return;
+    if (planLocked) return;
     setPlanLocked(true); setMessage("");
     try {
       const response = await fetch("/api/admin/sdk-production-private-workspace-owner-restoration/moi-lab2/plan", { method: "GET", cache: "no-store" });
-      const parsed = parsePlan(await json(response), account);
-      if (!response.ok || !parsed) throw new Error();
+      const payload = await json(response);
+      if (!response.ok) {
+        setMessage(`write-free plan fail-closed: ${safePlanError(payload)}`);
+        return;
+      }
+      const parsed = parsePlan(payload, account);
+      if (!parsed) {
+        setMessage("write-free plan fail-closed: OWNER_RESTORATION_PLAN_RESPONSE_INVALID");
+        return;
+      }
       setPlan(parsed);
-    } catch { setMessage("workspace/account/state identityが一致せず、write-free planを固定できませんでした。"); }
+    } catch { setMessage("write-free plan fail-closed: OWNER_RESTORATION_PLAN_UNAVAILABLE"); }
   };
 
   return <section className="rounded-2xl border border-violet-300/30 bg-violet-300/10 p-5" data-production-owner-restoration>
     <h2 className="text-lg font-black">Owner restoration preparation</h2>
     <p className="mt-2 text-sm">operator-selected mapping: workspace <b>moi-lab2</b> → exact username <b>moi</b></p>
     <p className="mt-1 text-xs text-slate-300">この画面はfingerprint取得とwrite-free planだけを行い、owner bindingやgrant等は実行しません。</p>
+    <p className="mt-1 break-all font-mono text-xs text-slate-400">fixed Production account fingerprint {fixedProductionAccountFingerprint}</p>
     <button type="button" onClick={() => void readAccount()} disabled={accountLocked} className="mt-4 w-full rounded-xl border border-violet-200/40 px-4 py-3 font-black disabled:opacity-40">exact moi account fingerprintを1回確認</button>
     {account && <div className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-4 text-sm" data-owner-account-fingerprint>
       <p className="font-black">EXACT ACCOUNT: UNIQUE</p>
       <p className="mt-2">username {account.username} / state {account.accountState} / grant {account.grant}</p>
       <p className="mt-2 break-all font-mono text-xs">fingerprint {account.fingerprint}</p>
     </div>}
-    <button type="button" onClick={() => void readPlan()} disabled={!account || planLocked} className="mt-4 w-full rounded-xl bg-violet-300 px-4 py-3 font-black text-slate-950 disabled:opacity-40">owner bindingのwrite-free planを1回確認</button>
+    <button type="button" onClick={() => void readPlan()} disabled={planLocked} className="mt-4 w-full rounded-xl bg-violet-300 px-4 py-3 font-black text-slate-950 disabled:opacity-40">owner bindingのwrite-free planを1回確認</button>
     {plan && <div className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-4 text-sm" data-owner-binding-write-free-plan>
       <p className="font-black">WRITE-FREE OWNER-BINDING PLAN</p>
       <p className="mt-2">workspace {plan.counts.workspaces} / games {plan.counts.games} / runtime files {plan.counts.runtimeFiles}</p>

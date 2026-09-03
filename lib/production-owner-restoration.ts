@@ -5,6 +5,8 @@ export const productionOwnerRestorationTarget = "moi-lab2" as const;
 export const productionOwnerRestorationUsername = "moi" as const;
 export const productionOwnerRestorationWorkspaceOperationId =
   "06eb6940-f624-59b0-8d00-47eba9a9cec8" as const;
+export const productionOwnerRestorationFixedProductionAccountFingerprint =
+  "opf_v1_QTP2zsdJ7Z6c6vgDTPI03XbqOJgsiJfzrGrs2D6L-nM" as const;
 
 export type ProductionOwnerRestorationAccountSource = {
   username: string;
@@ -44,6 +46,20 @@ export function projectProductionOwnerRestorationAccount(input: {
       secret: requireSecret(input.secret),
     }),
   } as const;
+}
+
+export function requireProductionOwnerRestorationAccountFingerprint(input: {
+  environment: "production" | "development";
+  fingerprint: string;
+}) {
+  if (
+    !/^opf_v1_[A-Za-z0-9_-]{43}$/.test(input.fingerprint)
+    || (
+      input.environment === "production"
+      && input.fingerprint !== productionOwnerRestorationFixedProductionAccountFingerprint
+    )
+  ) throw new Error("OWNER_RESTORATION_ACCOUNT_FINGERPRINT_CHANGED");
+  return input.fingerprint;
 }
 
 export type ProductionOwnerRestorationWorkspaceSource = {

@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   createProductionOwnerBindingWriteFreePlan,
+  productionOwnerRestorationFixedProductionAccountFingerprint,
   projectProductionOwnerRestorationAccount,
   projectProductionOwnerRestorationWorkspace,
+  requireProductionOwnerRestorationAccountFingerprint,
   productionOwnerRestorationWorkspaceOperationId,
 } from "../lib/production-owner-restoration.ts";
 import { productionPrivateWorkspaceImportRecoveryIdentity } from "../apps/sdk-portal/lib/production-private-workspace-import-public-contract.ts";
@@ -44,6 +46,21 @@ test("exact moi projection is strict, opaque, stable, and environment-bound", ()
   assert.equal(account().fingerprint, production.fingerprint);
   assert.notEqual(account("development").fingerprint, production.fingerprint);
   assert.doesNotMatch(JSON.stringify(production), /immutable-account-identity|email|provider|subject|credential|token|cookie|playerId|accountId/i);
+});
+
+test("Production plans lock the previously fixed exact-moi fingerprint", () => {
+  assert.equal(requireProductionOwnerRestorationAccountFingerprint({
+    environment: "production",
+    fingerprint: productionOwnerRestorationFixedProductionAccountFingerprint,
+  }), productionOwnerRestorationFixedProductionAccountFingerprint);
+  assert.throws(() => requireProductionOwnerRestorationAccountFingerprint({
+    environment: "production",
+    fingerprint: `opf_v1_${"A".repeat(43)}`,
+  }), /FINGERPRINT_CHANGED/);
+  assert.equal(requireProductionOwnerRestorationAccountFingerprint({
+    environment: "development",
+    fingerprint: `opf_v1_${"A".repeat(43)}`,
+  }), `opf_v1_${"A".repeat(43)}`);
 });
 
 test("account projection fails closed for missing, duplicate, different, or unsafe identity", () => {
@@ -103,6 +120,17 @@ test("routes and UI are GET-only, exact-target, no-store, and contain no binding
   assert.doesNotMatch(store + accountStore, /ensure(?:Sdk|Postgres)Schema|\b(?:INSERT|UPDATE|DELETE)\b/i);
   assert.match(panel, /exact moi account fingerprint/);
   assert.match(panel, /write-free plan/);
+  assert.match(panel, /fixed Production account fingerprint/);
+  assert.doesNotMatch(panel, /disabled=\{!account \|\| planLocked\}/);
+  assert.match(planRoute, /requireProductionOwnerRestorationAccountFingerprint/);
+  for (const code of [
+    "OWNER_RESTORATION_ACCOUNT_FINGERPRINT_CHANGED",
+    "OWNER_RESTORATION_INTERNAL_AUTH_REJECTED",
+    "OWNER_RESTORATION_WORKSPACE_NOT_FOUND",
+    "OWNER_RESTORATION_WORKSPACE_UNAVAILABLE",
+    "OWNER_RESTORATION_WORKSPACE_RESPONSE_INVALID",
+    "OWNER_RESTORATION_PLAN_INPUT_INVALID",
+  ]) assert.match(planRoute + panel, new RegExp(code));
   assert.doesNotMatch(panel, /moi2|moiwai/);
 });
 
