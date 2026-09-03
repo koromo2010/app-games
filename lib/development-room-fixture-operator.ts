@@ -6,6 +6,7 @@ import {
   developmentRoomFixtureFilteredRoomsPerSurface,
   developmentRoomFixtureNamespace,
   developmentRoomFixturePublicIdentity,
+  parseDevelopmentRoomFixturePublicReceipt,
   developmentRoomFixtureReceiptTtlSeconds,
   developmentRoomFixtureRoomTtlSeconds,
   developmentRoomFixtureScenario,
@@ -292,7 +293,7 @@ function publicReceipt(
   const builtInTargets = operation.targets.filter((target) => target.surface === builtInSurface);
   const sdkTargets = operation.targets.filter((target) => target.surface === sdkSurface);
   const cleanupTargets = operation.targets.filter((target) => target.cleaned).length;
-  return {
+  const receipt: DevelopmentRoomFixturePublicReceipt = {
     schemaVersion: 1,
     namespace: developmentRoomFixtureNamespace,
     operationId: operation.operationId,
@@ -311,6 +312,7 @@ function publicReceipt(
     ...(operation.verification ? { verification: operation.verification } : {}),
     ...(operation.errorCode ? { errorCode: operation.errorCode } : {}),
   };
+  return parseDevelopmentRoomFixturePublicReceipt(receipt, operation.operationId);
 }
 
 export class DevelopmentRoomFixtureOperator {
@@ -324,8 +326,15 @@ export class DevelopmentRoomFixtureOperator {
     this.loadSdkTemplate = options.loadSdkTemplate;
   }
 
-  private assertOwner(operation: DevelopmentRoomFixtureOperation, playerId: string) {
-    if (operation.actorDigest !== developmentRoomFixtureActorDigest(playerId)) {
+  private assertOwner(
+    operation: DevelopmentRoomFixtureOperation,
+    creatorSlug: string,
+    playerId: string,
+  ) {
+    if (
+      operation.creatorSlug !== creatorSlug
+      || operation.actorDigest !== developmentRoomFixtureActorDigest(playerId)
+    ) {
       throw new Error("DEVELOPMENT_ROOM_FIXTURE_FORBIDDEN");
     }
   }
@@ -554,7 +563,7 @@ export class DevelopmentRoomFixtureOperator {
     const key = operationKey(input.creatorSlug, operationId);
     const existing = await this.storage.read(key);
     if (existing) {
-      this.assertOwner(existing, input.playerId);
+      this.assertOwner(existing, input.creatorSlug, input.playerId);
       if (existing.state === "materializing" || existing.state === "cleaning") {
         throw new Error("DEVELOPMENT_ROOM_FIXTURE_OPERATION_IN_PROGRESS");
       }
@@ -605,7 +614,7 @@ export class DevelopmentRoomFixtureOperator {
     };
     const begun = await this.storage.begin(key, operation);
     if (!begun.created) {
-      this.assertOwner(begun.operation, input.playerId);
+      this.assertOwner(begun.operation, input.creatorSlug, input.playerId);
       if (begun.operation.state === "materializing" || begun.operation.state === "cleaning") {
         throw new Error("DEVELOPMENT_ROOM_FIXTURE_OPERATION_IN_PROGRESS");
       }
@@ -706,7 +715,7 @@ export class DevelopmentRoomFixtureOperator {
     const operationId = normalizeDevelopmentRoomFixtureOperationId(input.operationId);
     const operation = await this.storage.read(operationKey(input.creatorSlug, operationId));
     if (!operation) return null;
-    this.assertOwner(operation, input.playerId);
+    this.assertOwner(operation, input.creatorSlug, input.playerId);
     return publicReceipt(operation, true);
   }
 
@@ -733,7 +742,7 @@ export class DevelopmentRoomFixtureOperator {
     const key = operationKey(input.creatorSlug, operationId);
     let operation = await this.storage.read(key);
     if (!operation) throw new Error("DEVELOPMENT_ROOM_FIXTURE_NOT_FOUND");
-    this.assertOwner(operation, input.playerId);
+    this.assertOwner(operation, input.creatorSlug, input.playerId);
     if (operation.state === "cleaned") return publicReceipt(operation, true);
     if (!["ready", "partial", "materializing"].includes(operation.state)) {
       throw new Error("DEVELOPMENT_ROOM_FIXTURE_CLEANUP_STATE_INVALID");
@@ -774,11 +783,9 @@ export class DevelopmentRoomFixtureOperator {
     }));
     const remaining = remainingChecks.filter(Boolean).length;
     const baselineUnchanged = remaining === 0 && await this.baselineUnchanged(latest);
-    if (remaining !== 0 || !baselineUnchanged) {
+    if (remaining !== 0) {
       latest.state = "partial";
-      latest.errorCode = remaining !== 0
-        ? "DEVELOPMENT_ROOM_FIXTURE_CLEANUP_REMAINING"
-        : "DEVELOPMENT_ROOM_FIXTURE_BASELINE_CHANGED";
+      latest.errorCode = "DEVELOPMENT_ROOM_FIXTURE_CLEANUP_REMAINING";
       await this.storage.replace(key, ["cleaning"], latest);
       throw new Error(latest.errorCode);
     }
@@ -794,7 +801,8 @@ export class DevelopmentRoomFixtureOperator {
         builtInLaterJoinableEn: false,
         sdkLaterJoinable: false,
       }),
-      baselineUnchanged: true,
+      targetCleanupConfirmed: true,
+      baselineUnchanged,
     };
     const cleaned = await this.storage.replace(key, ["cleaning"], latest);
     return publicReceipt(cleaned, false);

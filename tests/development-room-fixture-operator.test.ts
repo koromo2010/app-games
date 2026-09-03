@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   developmentRoomFixtureEnvironmentAvailable,
+  developmentRoomFixtureNamespace,
   developmentRoomFixtureTargetMaximum,
   parseDevelopmentRoomFixtureRequest,
 } from "../lib/development-room-fixture-contract.ts";
@@ -305,6 +306,7 @@ test("materialize verifies fixed later-page scenario and replays without duplica
   const cleaned = await setup.instance.cleanup(materializeInput());
   assert.equal(cleaned.state, "cleaned");
   assert.equal(cleaned.counts.remainingTargets, 0);
+  assert.equal(cleaned.verification?.targetCleanupConfirmed, true);
   assert.equal(cleaned.verification?.baselineUnchanged, true);
   assert.equal(storage.rooms.get("hodoai:room:BASE"), baselineRaw);
   assert.deepEqual([...storage.indexes.get("hodoai:rooms") ?? []], ["BASE"]);
@@ -337,6 +339,53 @@ test("partial materialization preserves an exact cleanup receipt", async () => {
   assert.equal(cleaned.counts.remainingTargets, 0);
   assert.equal(storage.rooms.size, 0);
   assert.ok([...storage.indexes.values()].every((index) => index.size === 0));
+});
+
+test("cleanup is target-scoped and does not make unrelated baseline drift a failure", async () => {
+  const storage = new MemoryFixtureStorage();
+  const initial = JSON.stringify({ roomInstanceId: "preexisting-room", phase: "playing", revision: 1 });
+  const changed = JSON.stringify({ roomInstanceId: "preexisting-room", phase: "playing", revision: 2 });
+  storage.seed("hodoai:rooms", "hodoai:room:BASE", "BASE", initial);
+  const setup = operator(storage);
+  await setup.instance.materialize(materializeInput());
+  storage.rooms.set("hodoai:room:BASE", changed);
+
+  const cleaned = await setup.instance.cleanup(materializeInput());
+
+  assert.equal(cleaned.state, "cleaned");
+  assert.equal(cleaned.counts.remainingTargets, 0);
+  assert.equal(cleaned.verification?.targetCleanupConfirmed, true);
+  assert.equal(cleaned.verification?.baselineUnchanged, false);
+  assert.equal(storage.rooms.get("hodoai:room:BASE"), changed);
+  assert.deepEqual([...storage.indexes.get("hodoai:rooms") ?? []], ["BASE"]);
+});
+
+test("stored operation rejects actor and creator mismatches", async () => {
+  const storage = new MemoryFixtureStorage();
+  const setup = operator(storage);
+  await setup.instance.materialize(materializeInput());
+  await assert.rejects(
+    setup.instance.status({
+      creatorSlug: "test10-1",
+      playerId: "another-player",
+      operationId,
+    }),
+    /FORBIDDEN/,
+  );
+
+  const stored = [...storage.operations.values()][0]!;
+  storage.operations.set(
+    `development-room-fixture:v1:another-creator:${developmentRoomFixtureNamespace}:${operationId}`,
+    clone(stored),
+  );
+  await assert.rejects(
+    setup.instance.status({
+      creatorSlug: "another-creator",
+      playerId,
+      operationId,
+    }),
+    /FORBIDDEN/,
+  );
 });
 
 test("Production route gate returns 404 before authentication or operator access", async () => {

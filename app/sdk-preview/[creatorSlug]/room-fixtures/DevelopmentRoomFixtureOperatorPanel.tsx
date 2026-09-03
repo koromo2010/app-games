@@ -1,38 +1,44 @@
 "use client";
 
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
-import type { DevelopmentRoomFixturePublicReceipt } from "@/lib/development-room-fixture-contract";
+import {
+  developmentRoomFixtureOperationStorageKey,
+  developmentRoomFixturePointerShouldClear,
+  parseDevelopmentRoomFixtureOperationPointer,
+  parseDevelopmentRoomFixturePublicReceipt,
+  serializeDevelopmentRoomFixtureOperationPointer,
+  type DevelopmentRoomFixturePublicReceipt,
+} from "@/lib/development-room-fixture-public-contract";
 
 type WriteState = "idle" | "sending" | "sent" | "unknown";
-
-function storageKey(creatorSlug: string) {
-  return `game-fields:t185-room-fixture:${creatorSlug}`;
-}
-
-function receiptFrom(value: unknown) {
-  const candidate = value && typeof value === "object"
-    ? (value as { receipt?: unknown }).receipt
-    : null;
-  return candidate && typeof candidate === "object"
-    ? candidate as DevelopmentRoomFixturePublicReceipt
-    : null;
-}
+const pointerChangedEvent = "game-fields:t185-room-fixture-pointer-changed";
 
 export function DevelopmentRoomFixtureOperatorPanel({
   creatorSlug,
 }: {
   creatorSlug: string;
 }) {
-  const storedOperationId = useSyncExternalStore(
+  const pointerKey = useMemo(
+    () => developmentRoomFixtureOperationStorageKey(creatorSlug),
+    [creatorSlug],
+  );
+  const storedPointerRaw = useSyncExternalStore(
     (onStoreChange) => {
       window.addEventListener("storage", onStoreChange);
-      return () => window.removeEventListener("storage", onStoreChange);
+      window.addEventListener(pointerChangedEvent, onStoreChange);
+      return () => {
+        window.removeEventListener("storage", onStoreChange);
+        window.removeEventListener(pointerChangedEvent, onStoreChange);
+      };
     },
-    () => window.sessionStorage.getItem(storageKey(creatorSlug)) ?? "",
+    () => window.localStorage.getItem(pointerKey) ?? "",
     () => "",
   );
-  const [createdOperationId, setCreatedOperationId] = useState("");
-  const operationId = createdOperationId || storedOperationId;
+  const storedPointer = useMemo(
+    () => parseDevelopmentRoomFixtureOperationPointer(storedPointerRaw, creatorSlug),
+    [creatorSlug, storedPointerRaw],
+  );
+  const operationId = storedPointer?.operationId ?? "";
   const [receipt, setReceipt] = useState<DevelopmentRoomFixturePublicReceipt | null>(null);
   const [materializeState, setMaterializeState] = useState<WriteState>("idle");
   const [cleanupState, setCleanupState] = useState<WriteState>("idle");
@@ -42,41 +48,73 @@ export function DevelopmentRoomFixtureOperatorPanel({
     [creatorSlug],
   );
 
-  const readResponse = useCallback(async (response: Response) => {
+  const writePointer = useCallback((nextOperationId: string, expiresAt?: number) => {
+    window.localStorage.setItem(pointerKey, serializeDevelopmentRoomFixtureOperationPointer({
+      creatorSlug,
+      operationId: nextOperationId,
+      ...(expiresAt === undefined ? {} : { expiresAt }),
+    }));
+    window.dispatchEvent(new Event(pointerChangedEvent));
+  }, [creatorSlug, pointerKey]);
+
+  const clearPointer = useCallback(() => {
+    window.localStorage.removeItem(pointerKey);
+    window.dispatchEvent(new Event(pointerChangedEvent));
+  }, [pointerKey]);
+
+  const readResponse = useCallback(async (
+    response: Response,
+    expectedOperationId: string,
+  ) => {
     const payload = await response.json().catch(() => null) as {
       receipt?: unknown;
       error?: unknown;
     } | null;
-    const nextReceipt = receiptFrom(payload);
-    if (nextReceipt) setReceipt(nextReceipt);
+    if (developmentRoomFixturePointerShouldClear({ responseStatus: response.status })) {
+      clearPointer();
+    }
     if (!response.ok) {
       throw new Error(typeof payload?.error === "string" ? payload.error : "REQUEST_FAILED");
     }
+    const nextReceipt = parseDevelopmentRoomFixturePublicReceipt(
+      payload?.receipt,
+      expectedOperationId,
+    );
+    setReceipt(nextReceipt);
+    const responseDate = response.headers.get("date");
+    const confirmedServerNow = responseDate ? Date.parse(responseDate) : Number.NaN;
+    if (developmentRoomFixturePointerShouldClear({
+      receipt: nextReceipt,
+      ...(Number.isFinite(confirmedServerNow) ? { confirmedServerNow } : {}),
+    })) {
+      clearPointer();
+    } else {
+      writePointer(expectedOperationId, nextReceipt.expiresAt);
+    }
     return nextReceipt;
-  }, []);
+  }, [clearPointer, writePointer]);
 
   const materialize = useCallback(async () => {
     if (operationId || materializeState !== "idle") return;
     const nextOperationId = crypto.randomUUID();
-    window.sessionStorage.setItem(storageKey(creatorSlug), nextOperationId);
-    setCreatedOperationId(nextOperationId);
     setMaterializeState("sending");
     setMessage("materialize中…");
     try {
+      writePointer(nextOperationId);
       const next = await readResponse(await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         cache: "no-store",
         body: JSON.stringify({ operationId: nextOperationId }),
-      }));
+      }), nextOperationId);
       setMaterializeState("sent");
       setMessage(next?.state === "ready" ? "READY" : `state: ${next?.state ?? "unknown"}`);
     } catch (error) {
       setMaterializeState("unknown");
       setMessage(`結果不明または失敗: ${error instanceof Error ? error.message : "UNKNOWN"}。再送せずStatusで照合してください。`);
     }
-  }, [creatorSlug, endpoint, materializeState, operationId, readResponse]);
+  }, [endpoint, materializeState, operationId, readResponse, writePointer]);
 
   const status = useCallback(async () => {
     if (!operationId) return;
@@ -85,7 +123,7 @@ export function DevelopmentRoomFixtureOperatorPanel({
       const next = await readResponse(await fetch(
         `${endpoint}?operationId=${encodeURIComponent(operationId)}`,
         { credentials: "same-origin", cache: "no-store" },
-      ));
+      ), operationId);
       setMaterializeState("sent");
       setMessage(`status: ${next?.state ?? "unknown"}`);
     } catch (error) {
@@ -104,7 +142,7 @@ export function DevelopmentRoomFixtureOperatorPanel({
         credentials: "same-origin",
         cache: "no-store",
         body: JSON.stringify({ operationId }),
-      }));
+      }), operationId);
       setCleanupState("sent");
       setMessage(next?.state === "cleaned" ? "CLEANED" : `state: ${next?.state ?? "unknown"}`);
     } catch (error) {
@@ -144,7 +182,11 @@ export function DevelopmentRoomFixtureOperatorPanel({
           <button
             type="button"
             onClick={() => void cleanup()}
-            disabled={!operationId || cleanupState !== "idle" || receipt?.state === "cleaned"}
+            disabled={
+              !operationId
+              || cleanupState !== "idle"
+              || (receipt?.state !== "ready" && receipt?.state !== "partial")
+            }
             className="rounded-xl bg-rose-300 px-4 py-2 font-black text-slate-950 disabled:opacity-40"
           >
             Exact cleanup once
@@ -153,13 +195,14 @@ export function DevelopmentRoomFixtureOperatorPanel({
 
         <dl className="mt-6 grid gap-3 rounded-xl bg-black/25 p-4 text-sm sm:grid-cols-2">
           <div><dt className="text-slate-400">operation</dt><dd className="break-all font-mono">{operationId || "—"}</dd></div>
-          <div><dt className="text-slate-400">result</dt><dd>{message === "未実行" && storedOperationId ? "既存operationを検出しました。再送せずStatusで照合してください。" : message}</dd></div>
+          <div><dt className="text-slate-400">result</dt><dd>{message === "未実行" && storedPointer ? "既存operationを検出しました。再送せずStatusで照合してください。" : message}</dd></div>
           <div><dt className="text-slate-400">state</dt><dd data-testid="fixture-state">{receipt?.state ?? "—"}</dd></div>
           <div><dt className="text-slate-400">remaining</dt><dd data-testid="fixture-remaining">{receipt?.counts.remainingTargets ?? "—"}</dd></div>
           <div><dt className="text-slate-400">built-in targets</dt><dd>{receipt?.counts.builtInTargets ?? "—"}</dd></div>
           <div><dt className="text-slate-400">SDK targets</dt><dd>{receipt?.counts.sdkTargets ?? "—"}</dd></div>
           <div><dt className="text-slate-400">first pages filtered</dt><dd>{receipt?.verification ? String(receipt.verification.builtInFirstStoragePageFiltered && receipt.verification.sdkFirstStoragePageFiltered) : "—"}</dd></div>
-          <div><dt className="text-slate-400">baseline restored</dt><dd data-testid="fixture-baseline">{receipt?.verification?.baselineUnchanged === undefined ? "—" : String(receipt.verification.baselineUnchanged)}</dd></div>
+          <div><dt className="text-slate-400">target cleanup</dt><dd data-testid="fixture-target-cleanup">{receipt?.verification?.targetCleanupConfirmed === undefined ? "—" : String(receipt.verification.targetCleanupConfirmed)}</dd></div>
+          <div><dt className="text-slate-400">baseline unchanged (observed)</dt><dd data-testid="fixture-baseline">{receipt?.verification?.baselineUnchanged === undefined ? "—" : String(receipt.verification.baselineUnchanged)}</dd></div>
         </dl>
 
         <nav className="mt-6 grid gap-2 text-sm text-cyan-200 sm:grid-cols-2">

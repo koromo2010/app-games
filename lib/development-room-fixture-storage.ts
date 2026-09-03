@@ -47,6 +47,7 @@ export type DevelopmentRoomFixtureVerification = {
   builtInLaterJoinableJa: boolean;
   builtInLaterJoinableEn: boolean;
   sdkLaterJoinable: boolean;
+  targetCleanupConfirmed?: boolean;
   baselineUnchanged?: boolean;
 };
 
