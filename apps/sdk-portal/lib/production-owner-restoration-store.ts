@@ -1,5 +1,7 @@
-import type { ProductionOwnerRestorationWorkspaceSource } from "../../../lib/production-owner-restoration.ts";
-import { productionPrivateWorkspaceImportRecoveryIdentity } from "./production-private-workspace-import-public-contract.ts";
+import {
+  productionOwnerRestorationWorkspaceOperationId,
+  type ProductionOwnerRestorationWorkspaceSource,
+} from "../../../lib/production-owner-restoration.ts";
 import { sdkSql } from "./sdk-postgres.ts";
 
 export async function readProductionOwnerRestorationWorkspace(): Promise<ProductionOwnerRestorationWorkspaceSource | null> {
@@ -26,7 +28,7 @@ export async function readProductionOwnerRestorationWorkspace(): Promise<Product
     WHERE w.target_key = 'moi-lab2'
       AND w.environment = 'production'
       AND o.environment = 'production'
-      AND o.operation_id = ${productionPrivateWorkspaceImportRecoveryIdentity.operationId}::UUID
+      AND o.operation_id = ${productionOwnerRestorationWorkspaceOperationId}::UUID
       AND o.state = 'completed' AND o.phase = 'imported-private'
     LIMIT 2
   ` as Array<Record<string, unknown>>;

@@ -5,7 +5,9 @@ import {
   createProductionOwnerBindingWriteFreePlan,
   projectProductionOwnerRestorationAccount,
   projectProductionOwnerRestorationWorkspace,
+  productionOwnerRestorationWorkspaceOperationId,
 } from "../lib/production-owner-restoration.ts";
+import { productionPrivateWorkspaceImportRecoveryIdentity } from "../apps/sdk-portal/lib/production-private-workspace-import-public-contract.ts";
 
 const secret = "t131-a6-owner-restoration-test-secret-value";
 
@@ -21,7 +23,7 @@ function workspace(environment: "production" | "development" = "production") {
   return projectProductionOwnerRestorationWorkspace({
     workspace: {
       workspaceIdentity: "immutable-workspace-identity",
-      operationId: "fa5eca14-a961-4bd1-9e68-78a609895971",
+      operationId: productionOwnerRestorationWorkspaceOperationId,
       bundleSha256: "a".repeat(64), workspaceManifestSha256: "b".repeat(64), perGameLedgerSha256: "c".repeat(64),
       workspaceRows: 1, gameRows: 2, fileRows: 21,
       visibility: "private-quarantined", ownerBinding: "unbound",
@@ -75,7 +77,7 @@ test("workspace projection and plan lock exact A5 identity, counts, state, and z
 test("workspace state change invalidates the plan receipt and invalid state fails closed", () => {
   const base = workspace();
   const source = {
-    workspaceIdentity: "immutable-workspace-identity", operationId: "fa5eca14-a961-4bd1-9e68-78a609895971",
+    workspaceIdentity: "immutable-workspace-identity", operationId: productionOwnerRestorationWorkspaceOperationId,
     bundleSha256: "a".repeat(64), workspaceManifestSha256: "b".repeat(64), perGameLedgerSha256: "c".repeat(64),
     workspaceRows: 1, gameRows: 2, fileRows: 21, visibility: "private-quarantined", ownerBinding: "unbound",
     grants: 0, releases: 0, publications: 0, aliases: 0, rooms: 0,
@@ -102,4 +104,14 @@ test("routes and UI are GET-only, exact-target, no-store, and contain no binding
   assert.match(panel, /exact moi account fingerprint/);
   assert.match(panel, /write-free plan/);
   assert.doesNotMatch(panel, /moi2|moiwai/);
+});
+
+test("owner restoration locks the completed A5 workspace operation, not the pre-import A3 recovery identity", () => {
+  assert.equal(productionOwnerRestorationWorkspaceOperationId, "06eb6940-f624-59b0-8d00-47eba9a9cec8");
+  assert.notEqual(productionOwnerRestorationWorkspaceOperationId, productionPrivateWorkspaceImportRecoveryIdentity.operationId);
+  const store = readFileSync("apps/sdk-portal/lib/production-owner-restoration-store.ts", "utf8");
+  const panel = readFileSync("app/site-admin/runtime-operations/production-private-workspace-import/moi-lab2/ProductionOwnerRestorationPanel.tsx", "utf8");
+  assert.match(store, /productionOwnerRestorationWorkspaceOperationId/);
+  assert.match(panel, /06eb6940-f624-59b0-8d00-47eba9a9cec8/);
+  assert.doesNotMatch(store + panel, /fa5eca14-a961-4bd1-9e68-78a609895971/);
 });
