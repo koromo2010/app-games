@@ -10,8 +10,44 @@ import {
   productionOwnerRestorationWorkspaceOperationId,
 } from "../lib/production-owner-restoration.ts";
 import { productionPrivateWorkspaceImportRecoveryIdentity } from "../apps/sdk-portal/lib/production-private-workspace-import-public-contract.ts";
+import {
+  resolveProductionOwnerRestorationWorkspaceCandidates,
+} from "../apps/sdk-portal/lib/production-owner-restoration-store.ts";
+import type { CompletedProductionPrivateWorkspaceImport } from "../apps/sdk-portal/lib/production-private-workspace-import.ts";
 
 const secret = "t131-a6-owner-restoration-test-secret-value";
+
+function completedImport(
+  overrides: Partial<CompletedProductionPrivateWorkspaceImport> = {},
+): CompletedProductionPrivateWorkspaceImport {
+  return {
+    target: "moi-lab2",
+    operationId: productionOwnerRestorationWorkspaceOperationId,
+    planReceipt: "d".repeat(64),
+    bundleSha256: "a".repeat(64),
+    readBack: {
+      targetWorkspaceRows: 1,
+      targetWorkspaceGameRows: 2,
+      targetWorkspaceFileRows: 21,
+      bundleSha256: "a".repeat(64),
+      workspaceManifestSha256: "b".repeat(64),
+      perGameLedgerSha256: "c".repeat(64),
+      gameIdentitySetSha256: "e".repeat(64),
+      perGameIdentitySha256: "f".repeat(64),
+      contentSetSha256: "1".repeat(64),
+      sourceStateToken: "2".repeat(64),
+      publicStateToken: "3".repeat(64),
+      unrelatedPrivateStateToken: "4".repeat(64),
+      ownerBindingRows: 0,
+      grantRows: 0,
+      releaseRows: 0,
+      publicationRows: 0,
+      aliasRows: 0,
+      roomRows: 0,
+    },
+    ...overrides,
+  };
+}
 
 function account(environment: "production" | "development" = "production") {
   return projectProductionOwnerRestorationAccount({
@@ -142,4 +178,59 @@ test("owner restoration locks the completed A5 workspace operation, not the pre-
   assert.match(store, /productionOwnerRestorationWorkspaceOperationId/);
   assert.match(panel, /06eb6940-f624-59b0-8d00-47eba9a9cec8/);
   assert.doesNotMatch(store + panel, /fa5eca14-a961-4bd1-9e68-78a609895971/);
+});
+
+test("owner restoration resolves one canonical A5 completed import and creates one stable plan", () => {
+  const source = resolveProductionOwnerRestorationWorkspaceCandidates([completedImport()]);
+  assert.ok(source);
+  assert.deepEqual({
+    workspaceIdentity: source.workspaceIdentity,
+    operationId: source.operationId,
+    workspaceRows: source.workspaceRows,
+    gameRows: source.gameRows,
+    fileRows: source.fileRows,
+    visibility: source.visibility,
+    ownerBinding: source.ownerBinding,
+    grants: source.grants,
+  }, {
+    workspaceIdentity: productionOwnerRestorationWorkspaceOperationId,
+    operationId: productionOwnerRestorationWorkspaceOperationId,
+    workspaceRows: 1,
+    gameRows: 2,
+    fileRows: 21,
+    visibility: "private-quarantined",
+    ownerBinding: "unbound",
+    grants: 0,
+  });
+  const projected = projectProductionOwnerRestorationWorkspace({ workspace: source, environment: "production", secret });
+  const first = createProductionOwnerBindingWriteFreePlan({ account: account(), workspace: projected, environment: "production", secret });
+  const second = createProductionOwnerBindingWriteFreePlan({ account: account(), workspace: projected, environment: "production", secret });
+  assert.equal(first.planReceipt, second.planReceipt);
+  assert.equal(first.plannedEffect.ownerBindings, 1);
+  assert.deepEqual(first.nonEffects, { grants: 0, releases: 0, publications: 0, aliases: 0, rooms: 0 });
+});
+
+test("owner restoration lookup fails closed for absent, duplicate, wrong operation, or invalid state", () => {
+  const exact = completedImport();
+  assert.equal(resolveProductionOwnerRestorationWorkspaceCandidates([]), null);
+  assert.equal(resolveProductionOwnerRestorationWorkspaceCandidates([exact, exact]), null);
+  assert.equal(resolveProductionOwnerRestorationWorkspaceCandidates([
+    completedImport({ operationId: productionPrivateWorkspaceImportRecoveryIdentity.operationId }),
+  ]), null);
+
+  const invalid = resolveProductionOwnerRestorationWorkspaceCandidates([
+    completedImport({ readBack: { ...exact.readBack, targetWorkspaceFileRows: 20 } }),
+  ]);
+  assert.ok(invalid);
+  assert.throws(() => projectProductionOwnerRestorationWorkspace({ workspace: invalid, environment: "production", secret }), /WORKSPACE_STATE_INVALID/);
+});
+
+test("owner restoration uses the same fixed Production SDK origin as A5", () => {
+  const proxy = readFileSync("lib/production-private-workspace-import-proxy.ts", "utf8");
+  const planRoute = readFileSync("app/api/admin/sdk-production-private-workspace-owner-restoration/moi-lab2/plan/route.ts", "utf8");
+  assert.match(proxy, /productionOwnerRestorationInternalUrl/);
+  assert.match(proxy, /https:\/\/sdk\.game-fields\.com/);
+  assert.match(planRoute, /productionOwnerRestorationInternalUrl\(\)/);
+  assert.match(planRoute, /isCanonicalProductionPlatformRuntime/);
+  assert.doesNotMatch(planRoute, /sdkPromotionInternalBaseUrl|SDK_PROMOTION_INTERNAL_URL/);
 });
