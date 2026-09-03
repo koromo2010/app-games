@@ -65,7 +65,7 @@ function parsePlan(value: unknown, account: AccountProjection): OwnerBindingPlan
   if (v.schemaVersion !== 1 || v.environment !== account.environment || v.phase !== "write-free-owner-binding-plan"
     || v.target !== "moi-lab2" || v.selectionBasis !== "OPERATOR_SELECTED_RESTORATION_TARGET"
     || v.username !== "moi" || v.accountFingerprint !== account.fingerprint
-    || wi.operationId !== "fa5eca14-a961-4bd1-9e68-78a609895971"
+    || wi.operationId !== "06eb6940-f624-59b0-8d00-47eba9a9cec8"
     || typeof wi.bundleSha256 !== "string" || !sha256Pattern.test(wi.bundleSha256)
     || typeof wi.workspaceManifestSha256 !== "string" || !sha256Pattern.test(wi.workspaceManifestSha256)
     || typeof wi.perGameLedgerSha256 !== "string" || !sha256Pattern.test(wi.perGameLedgerSha256)

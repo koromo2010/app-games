@@ -3,6 +3,8 @@ import { operatorOwnerFingerprint } from "../apps/sdk-portal/lib/creator-ownersh
 
 export const productionOwnerRestorationTarget = "moi-lab2" as const;
 export const productionOwnerRestorationUsername = "moi" as const;
+export const productionOwnerRestorationWorkspaceOperationId =
+  "06eb6940-f624-59b0-8d00-47eba9a9cec8" as const;
 
 export type ProductionOwnerRestorationAccountSource = {
   username: string;
@@ -75,7 +77,7 @@ export function projectProductionOwnerRestorationWorkspace(input: {
 }) {
   const w = input.workspace;
   if (
-    w.operationId !== "fa5eca14-a961-4bd1-9e68-78a609895971"
+    w.operationId !== productionOwnerRestorationWorkspaceOperationId
     || !/^[0-9a-f]{64}$/.test(w.bundleSha256)
     || !/^[0-9a-f]{64}$/.test(w.workspaceManifestSha256)
     || !/^[0-9a-f]{64}$/.test(w.perGameLedgerSha256)
