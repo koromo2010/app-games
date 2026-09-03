@@ -9,6 +9,7 @@ import {
 import { requireFullSiteAdminSession } from "@/lib/site-admin-auth";
 import { isRecentSiteAdminMfa } from "@/lib/site-admin-auth-core";
 import { ProductionPrivateWorkspaceImportPanel } from "./ProductionPrivateWorkspaceImportPanel";
+import { ProductionOwnerRestorationPanel } from "./ProductionOwnerRestorationPanel";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -57,6 +58,7 @@ export default async function ProductionPrivateWorkspaceImportPage() {
           <p data-production-private-import-source={sourceCommit} className="mt-2 break-all font-mono text-xs text-slate-500">source {sourceCommit}</p>
         </header>
         <ProductionPrivateWorkspaceImportPanel mode={mode} initialAccess={access} />
+        {access === "ready" && <ProductionOwnerRestorationPanel />}
         <Link href="/admin" className="inline-flex rounded-lg border border-white/15 px-4 py-2 text-sm font-bold text-slate-300 hover:bg-white/10">Site Adminへ戻る</Link>
       </div>
     </main>
