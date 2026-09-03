@@ -4,8 +4,12 @@ import {
   projectProductionOwnerRestorationAccount,
   requireProductionOwnerRestorationAccountFingerprint,
 } from "@/lib/production-owner-restoration";
+import {
+  isCanonicalProductionPlatformRuntime,
+  productionOwnerRestorationInternalUrl,
+  productionPrivateWorkspaceImportRuntimeIdentity,
+} from "@/lib/production-private-workspace-import-proxy";
 import { requireFullSiteAdminSession, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
-import { sdkPromotionInternalBaseUrl } from "@/lib/sdk-preview-runtime-source";
 import { sdkServiceHeaders } from "@/lib/sdk-service-auth";
 import { sdkSupportEnvironment } from "@/lib/storage-environment-guard";
 
@@ -39,6 +43,10 @@ export async function GET(request: Request) {
       return Response.json({ error: "OWNER_RESTORATION_INPUT_INVALID" }, { status: 400, headers });
     }
     const environment = sdkSupportEnvironment();
+    if (
+      environment !== "production"
+      || !isCanonicalProductionPlatformRuntime(productionPrivateWorkspaceImportRuntimeIdentity())
+    ) return safeError("OWNER_RESTORATION_PLAN_INPUT_INVALID", 400);
     const account = projectProductionOwnerRestorationAccount({
       accounts: await readExactProductionOwnerRestorationAccounts(),
       environment,
@@ -48,11 +56,7 @@ export async function GET(request: Request) {
       environment,
       fingerprint: account.fingerprint,
     });
-    const target = new URL(
-      "/api/internal/recovery/production-private-workspace-owner-restoration/moi-lab2/state",
-      sdkPromotionInternalBaseUrl(),
-    );
-    const url = target.toString();
+    const url = productionOwnerRestorationInternalUrl();
     const response = await fetch(url, {
       method: "GET",
       headers: sdkServiceHeaders("GET", url, { environment }),
