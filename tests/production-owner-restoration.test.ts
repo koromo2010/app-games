@@ -14,6 +14,9 @@ import {
   resolveProductionOwnerRestorationWorkspaceCandidates,
 } from "../apps/sdk-portal/lib/production-owner-restoration-store.ts";
 import type { CompletedProductionPrivateWorkspaceImport } from "../apps/sdk-portal/lib/production-private-workspace-import.ts";
+import {
+  projectCompletedProductionPrivateWorkspaceImportDiagnostic,
+} from "../apps/sdk-portal/lib/production-private-workspace-import-store.ts";
 
 const secret = "t131-a6-owner-restoration-test-secret-value";
 
@@ -71,6 +74,124 @@ function workspace(environment: "production" | "development" = "production") {
     secret,
   });
 }
+
+const canonicalDiagnosticRow: Record<string, unknown> = {
+  operationRows: 1,
+  operationIdExact: true,
+  nonceExact: true,
+  operationEnvironmentExact: true,
+  intentExact: true,
+  operationStateCompleted: true,
+  operationStatePending: false,
+  operationPhaseImported: true,
+  operationPhaseLedger: false,
+  terminalReceiptPresent: true,
+  readBackShaPresent: true,
+  workspaceRows: 1,
+  workspaceIdentityExact: true,
+  workspaceTargetExact: true,
+  workspaceEnvironmentExact: true,
+  privateQuarantined: true,
+  ownerUnbound: true,
+  bundleMatch: true,
+  manifestMatch: true,
+  ledgerMatch: true,
+  remainingHashesMatch: true,
+  games2: true,
+  runtimeFiles21: true,
+  runtimeBytesMatch: true,
+  fileByteIntegrity: true,
+  grants0: true,
+  releases0: true,
+  publications0: true,
+  aliases0: true,
+  rooms0: true,
+  canonicalReaderMatched: true,
+};
+
+function completedImportDiagnostic(overrides: Record<string, unknown> = {}, tables = { operations: true, workspaces: true, games: true, files: true }) {
+  return projectCompletedProductionPrivateWorkspaceImportDiagnostic({
+    operationId: productionOwnerRestorationWorkspaceOperationId,
+    tablePresence: tables,
+    databaseContext: {
+      selectedKey: "SDK_DATABASE_URL",
+      fallbackUsed: false,
+      databaseTargetFingerprint: "t".repeat(64),
+      databaseNameFingerprint: "n".repeat(64),
+    },
+    row: { ...canonicalDiagnosticRow, ...overrides },
+  });
+}
+
+test("completed-import diagnostic accepts only the complete canonical A5 contract", () => {
+  const diagnostic = completedImportDiagnostic();
+  assert.equal(diagnostic.canonicalReader.matched, true);
+  assert.deepEqual(diagnostic.canonicalReader.excludedBy, []);
+  assert.equal(diagnostic.operation.state, "completed");
+  assert.equal(diagnostic.operation.phase, "imported-private");
+  assert.equal(diagnostic.integrity.games2, "pass");
+  assert.equal(diagnostic.integrity.runtimeFiles21, "pass");
+  assert.equal(diagnostic.database.selectorMatch, true);
+  assert.equal(diagnostic.database.fingerprintMatch, true);
+  assert.doesNotMatch(JSON.stringify(diagnostic), /databaseUrl|host|username|token|cookie|content_bytes|credential/i);
+});
+
+test("completed-import diagnostic does not promote 1/2/21 pending or ledger-recorded operations", () => {
+  const pending = completedImportDiagnostic({
+    operationStateCompleted: false,
+    operationStatePending: true,
+    operationPhaseImported: false,
+    operationPhaseLedger: true,
+    canonicalReaderMatched: false,
+  });
+  assert.equal(pending.operation.state, "pending");
+  assert.equal(pending.operation.phase, "ledger-recorded");
+  assert.equal(pending.integrity.games2, "pass");
+  assert.equal(pending.integrity.runtimeFiles21, "pass");
+  assert.equal(pending.canonicalReader.matched, false);
+  assert.ok(pending.canonicalReader.excludedBy.includes("OPERATION"));
+});
+
+test("completed-import diagnostic fails closed without either terminal receipt or read-back SHA", () => {
+  for (const missing of ["terminalReceiptPresent", "readBackShaPresent"] as const) {
+    const diagnostic = completedImportDiagnostic({ [missing]: false, canonicalReaderMatched: false });
+    assert.equal(diagnostic.canonicalReader.matched, false);
+    assert.equal(diagnostic.operation[missing], "fail");
+    assert.ok(diagnostic.canonicalReader.excludedBy.includes("TERMINAL"));
+  }
+});
+
+test("completed-import diagnostic records every canonical predicate family as fail-closed", () => {
+  const cases: Array<[string, Record<string, unknown>, string]> = [
+    ["operation multiplicity", { operationRows: 2, canonicalReaderMatched: false }, "OPERATION"],
+    ["nonce", { nonceExact: false, canonicalReaderMatched: false }, "OPERATION"],
+    ["workspace join", { workspaceRows: 0, canonicalReaderMatched: false }, "WORKSPACE"],
+    ["quarantine", { privateQuarantined: false, canonicalReaderMatched: false }, "WORKSPACE"],
+    ["owner", { ownerUnbound: false, canonicalReaderMatched: false }, "WORKSPACE"],
+    ["bundle", { bundleMatch: false, canonicalReaderMatched: false }, "INTEGRITY"],
+    ["manifest", { manifestMatch: false, canonicalReaderMatched: false }, "INTEGRITY"],
+    ["ledger", { ledgerMatch: false, canonicalReaderMatched: false }, "INTEGRITY"],
+    ["remaining hashes", { remainingHashesMatch: false, canonicalReaderMatched: false }, "INTEGRITY"],
+    ["games", { games2: false, canonicalReaderMatched: false }, "INTEGRITY"],
+    ["files", { runtimeFiles21: false, canonicalReaderMatched: false }, "INTEGRITY"],
+    ["runtime bytes", { runtimeBytesMatch: false, canonicalReaderMatched: false }, "INTEGRITY"],
+    ["file bytes", { fileByteIntegrity: false, canonicalReaderMatched: false }, "INTEGRITY"],
+    ["grant", { grants0: false, canonicalReaderMatched: false }, "NON_EFFECTS"],
+    ["release", { releases0: false, canonicalReaderMatched: false }, "NON_EFFECTS"],
+    ["publication", { publications0: false, canonicalReaderMatched: false }, "NON_EFFECTS"],
+    ["alias", { aliases0: false, canonicalReaderMatched: false }, "NON_EFFECTS"],
+    ["room", { rooms0: false, canonicalReaderMatched: false }, "NON_EFFECTS"],
+  ];
+  for (const [name, overrides, exclusion] of cases) {
+    const diagnostic = completedImportDiagnostic(overrides);
+    assert.equal(diagnostic.canonicalReader.matched, false, name);
+    assert.ok(diagnostic.canonicalReader.excludedBy.includes(exclusion as never), name);
+  }
+  const missingTable = completedImportDiagnostic({}, { operations: true, workspaces: false, games: true, files: true });
+  assert.equal(missingTable.canonicalReader.matched, false);
+  assert.deepEqual(missingTable.canonicalReader.excludedBy, ["TABLES"]);
+  assert.equal(missingTable.workspace.join, "not-assessed");
+});
 
 test("exact moi projection is strict, opaque, stable, and environment-bound", () => {
   const production = account();
@@ -145,17 +266,20 @@ test("workspace state change invalidates the plan receipt and invalid state fail
 test("routes and UI are GET-only, exact-target, no-store, and contain no binding write", () => {
   const accountRoute = readFileSync("app/api/admin/sdk-production-private-workspace-owner-restoration/moi-lab2/account/route.ts", "utf8");
   const planRoute = readFileSync("app/api/admin/sdk-production-private-workspace-owner-restoration/moi-lab2/plan/route.ts", "utf8");
+  const diagnosticRoute = readFileSync("app/api/admin/sdk-production-private-workspace-owner-restoration/moi-lab2/completed-import-diagnostic/route.ts", "utf8");
   const internal = readFileSync("apps/sdk-portal/app/api/internal/recovery/production-private-workspace-owner-restoration/moi-lab2/state/route.ts", "utf8");
+  const diagnosticInternal = readFileSync("apps/sdk-portal/app/api/internal/recovery/production-private-workspace-owner-restoration/moi-lab2/completed-import-diagnostic/route.ts", "utf8");
   const store = readFileSync("apps/sdk-portal/lib/production-owner-restoration-store.ts", "utf8");
   const accountStore = readFileSync("lib/player-owner-restoration-admin-store.ts", "utf8");
   const panel = readFileSync("app/site-admin/runtime-operations/production-private-workspace-import/moi-lab2/ProductionOwnerRestorationPanel.tsx", "utf8");
-  assert.match(accountRoute + planRoute, /requireFullSiteAdminSession/);
-  assert.match(accountRoute + planRoute + internal, /private, no-store/);
-  assert.match(internal, /requireSdkServiceRequest/);
-  assert.doesNotMatch(accountRoute + planRoute + internal, /export async function (?:POST|PUT|PATCH|DELETE)/);
+  assert.match(accountRoute + planRoute + diagnosticRoute, /requireFullSiteAdminSession/);
+  assert.match(accountRoute + planRoute + diagnosticRoute + internal + diagnosticInternal, /private, no-store/);
+  assert.match(internal + diagnosticInternal, /requireSdkServiceRequest/);
+  assert.doesNotMatch(accountRoute + planRoute + diagnosticRoute + internal + diagnosticInternal, /export async function (?:POST|PUT|PATCH|DELETE)/);
   assert.doesNotMatch(store + accountStore, /ensure(?:Sdk|Postgres)Schema|\b(?:INSERT|UPDATE|DELETE)\b/i);
   assert.match(panel, /exact moi account fingerprint/);
   assert.match(panel, /write-free plan/);
+  assert.match(panel, /completed-import diagnostic/);
   assert.match(panel, /fixed Production account fingerprint/);
   assert.doesNotMatch(panel, /disabled=\{!account \|\| planLocked\}/);
   assert.match(planRoute, /requireProductionOwnerRestorationAccountFingerprint/);
@@ -168,6 +292,8 @@ test("routes and UI are GET-only, exact-target, no-store, and contain no binding
     "OWNER_RESTORATION_PLAN_INPUT_INVALID",
   ]) assert.match(planRoute + panel, new RegExp(code));
   assert.doesNotMatch(panel, /moi2|moiwai/);
+  assert.match(diagnosticRoute + diagnosticInternal, /OWNER_RESTORATION_DIAGNOSTIC_UNAVAILABLE/);
+  assert.doesNotMatch(diagnosticRoute + diagnosticInternal, /ensure(?:Sdk|Postgres)Schema|\b(?:INSERT|UPDATE|DELETE)\b/i);
 });
 
 test("owner restoration locks the completed A5 workspace operation, not the pre-import A3 recovery identity", () => {

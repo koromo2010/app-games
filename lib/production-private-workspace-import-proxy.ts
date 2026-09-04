@@ -1,8 +1,11 @@
 import type { ProductionPrivateWorkspaceImportRuntimeIdentity } from "./production-private-workspace-import-page-access.ts";
 
 const productionSdkOrigin = "https://sdk.game-fields.com";
+const developmentSdkOrigin = "https://sdk-dev.game-fields.com";
 const productionOwnerRestorationStatePath =
   "/api/internal/recovery/production-private-workspace-owner-restoration/moi-lab2/state";
+const productionOwnerRestorationDiagnosticPath =
+  "/api/internal/recovery/production-private-workspace-owner-restoration/moi-lab2/completed-import-diagnostic";
 
 export function isCanonicalProductionPlatformRuntime(
   identity: ProductionPrivateWorkspaceImportRuntimeIdentity,
@@ -26,6 +29,18 @@ export function productionOwnerRestorationInternalUrl() {
   if (url.origin !== productionSdkOrigin || url.pathname !== productionOwnerRestorationStatePath) {
     throw new Error("OWNER_RESTORATION_TARGET_INVALID");
   }
+  return url.toString();
+}
+
+/** Exact internal target for the read-only completed-import diagnostic only. */
+export function productionOwnerRestorationDiagnosticInternalUrl(environment: "production" | "development") {
+  const origin = environment === "production" ? productionSdkOrigin : developmentSdkOrigin;
+  const url = new URL(productionOwnerRestorationDiagnosticPath, origin);
+  if (
+    url.origin !== origin
+    || url.pathname !== productionOwnerRestorationDiagnosticPath
+    || url.search
+  ) throw new Error("OWNER_RESTORATION_DIAGNOSTIC_TARGET_INVALID");
   return url.toString();
 }
 
