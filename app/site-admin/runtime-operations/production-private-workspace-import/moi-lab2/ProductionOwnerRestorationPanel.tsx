@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { isDiagnosticFailureCode } from "@/lib/production-owner-restoration-diagnostic";
 
 const fixedProductionAccountFingerprint = "opf_v1_QTP2zsdJ7Z6c6vgDTPI03XbqOJgsiJfzrGrs2D6L-nM";
 
@@ -139,6 +140,13 @@ function parseDiagnostic(value: unknown): CompletionDiagnostic | null {
 
 async function json(response: Response) { try { return await response.json(); } catch { return null; } }
 
+function safeDiagnosticError(value: unknown) {
+  const v = object(value);
+  return v && isDiagnosticFailureCode(v.error)
+    ? v.error
+    : "OWNER_RESTORATION_DIAGNOSTIC_UNAVAILABLE";
+}
+
 const safePlanErrorCodes = new Set([
   "OWNER_RESTORATION_ACCOUNT_NOT_FOUND",
   "OWNER_RESTORATION_ACCOUNT_AMBIGUOUS",
@@ -202,8 +210,13 @@ export function ProductionOwnerRestorationPanel() {
     setDiagnosticLocked(true); setMessage(""); setDiagnostic(null);
     try {
       const response = await fetch("/api/admin/sdk-production-private-workspace-owner-restoration/moi-lab2/completed-import-diagnostic", { method: "GET", cache: "no-store" });
-      const parsed = parseDiagnostic(await json(response));
-      if (!response.ok || !parsed) throw new Error();
+      const payload = await json(response);
+      if (!response.ok) {
+        setMessage(`completed-import diagnostic fail-closed: ${safeDiagnosticError(payload)}`);
+        return;
+      }
+      const parsed = parseDiagnostic(payload);
+      if (!parsed) throw new Error();
       setDiagnostic(parsed);
     } catch { setMessage("completed-import diagnostic fail-closed: OWNER_RESTORATION_DIAGNOSTIC_UNAVAILABLE"); }
   };

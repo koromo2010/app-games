@@ -1,4 +1,5 @@
 import { productionOwnerRestorationWorkspaceOperationId } from "../../../../../../../../../lib/production-owner-restoration";
+import { diagnosticFailureCode } from "../../../../../../../../../lib/production-owner-restoration-diagnostic";
 import { diagnoseCompletedProductionPrivateWorkspaceImport } from "@/lib/production-private-workspace-import-store";
 import { requireSdkServiceRequest } from "@/lib/sdk-service-auth";
 
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
       await diagnoseCompletedProductionPrivateWorkspaceImport(productionOwnerRestorationWorkspaceOperationId),
       { headers },
     );
-  } catch {
-    return Response.json({ error: "OWNER_RESTORATION_DIAGNOSTIC_UNAVAILABLE" }, { status: 503, headers });
+  } catch (error) {
+    return Response.json({ error: diagnosticFailureCode(error) }, { status: 503, headers });
   }
 }
