@@ -13,6 +13,10 @@ import {
   productionPrivateWorkspaceImportSchemaStatements,
 } from "./production-private-workspace-import-schema.ts";
 import { createHash } from "node:crypto";
+import {
+  ProductionOwnerRestorationDiagnosticError,
+  diagnosticQueryFailureCode,
+} from "../../../lib/production-owner-restoration-diagnostic.ts";
 import { sdkRuntimeSqlContext } from "./sdk-postgres.ts";
 
 type SnapshotRow = Record<string, unknown>;
@@ -559,18 +563,41 @@ export function projectCompletedProductionPrivateWorkspaceImportDiagnostic(input
 export async function diagnoseCompletedProductionPrivateWorkspaceImport(
   operationId: string,
 ): Promise<ProductionPrivateWorkspaceImportCompletionDiagnostic> {
-  const context = sdkRuntimeSqlContext();
-  const tablePresence = await productionTablePresence(context.sql);
+  let context: ReturnType<typeof sdkRuntimeSqlContext>;
+  try {
+    context = sdkRuntimeSqlContext();
+  } catch {
+    throw new ProductionOwnerRestorationDiagnosticError(
+      "OWNER_RESTORATION_DIAGNOSTIC_DATABASE_SELECTOR_UNAVAILABLE",
+    );
+  }
+  let tablePresence: ProductionPrivateWorkspaceImportTablePresence;
+  try {
+    tablePresence = await productionTablePresence(context.sql);
+  } catch (error) {
+    throw new ProductionOwnerRestorationDiagnosticError(diagnosticQueryFailureCode(error));
+  }
   const tablesPresent = allProductionTablesPresent(tablePresence);
-  const row = tablesPresent
-    ? (await context.sql.query(productionPrivateWorkspaceImportDiagnosticSelect, [operationId]) as Array<Record<string, unknown>>)[0] ?? {}
-    : undefined;
-  return projectCompletedProductionPrivateWorkspaceImportDiagnostic({
-    operationId,
-    tablePresence,
-    databaseContext: context,
-    row,
-  });
+  let row: Record<string, unknown> | undefined;
+  if (tablesPresent) {
+    try {
+      row = (await context.sql.query(productionPrivateWorkspaceImportDiagnosticSelect, [operationId]) as Array<Record<string, unknown>>)[0] ?? {};
+    } catch (error) {
+      throw new ProductionOwnerRestorationDiagnosticError(diagnosticQueryFailureCode(error));
+    }
+  }
+  try {
+    return projectCompletedProductionPrivateWorkspaceImportDiagnostic({
+      operationId,
+      tablePresence,
+      databaseContext: context,
+      row,
+    });
+  } catch {
+    throw new ProductionOwnerRestorationDiagnosticError(
+      "OWNER_RESTORATION_DIAGNOSTIC_RESPONSE_PROJECTION_UNSUPPORTED",
+    );
+  }
 }
 
 type ExecutionRow = CompletedRow & { result?: unknown; replayed?: unknown; terminalReceipt?: unknown };

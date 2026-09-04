@@ -17,6 +17,12 @@ import type { CompletedProductionPrivateWorkspaceImport } from "../apps/sdk-port
 import {
   projectCompletedProductionPrivateWorkspaceImportDiagnostic,
 } from "../apps/sdk-portal/lib/production-private-workspace-import-store.ts";
+import {
+  ProductionOwnerRestorationDiagnosticError,
+  diagnosticFailureCode,
+  diagnosticQueryFailureCode,
+  productionOwnerRestorationDiagnosticFailureCodes,
+} from "../lib/production-owner-restoration-diagnostic.ts";
 
 const secret = "t131-a6-owner-restoration-test-secret-value";
 
@@ -193,6 +199,24 @@ test("completed-import diagnostic records every canonical predicate family as fa
   assert.equal(missingTable.workspace.join, "not-assessed");
 });
 
+test("completed-import diagnostic classifies infrastructure failures without projecting driver details", () => {
+  assert.equal(
+    diagnosticFailureCode(new ProductionOwnerRestorationDiagnosticError("OWNER_RESTORATION_DIAGNOSTIC_MODULE_UNAVAILABLE")),
+    "OWNER_RESTORATION_DIAGNOSTIC_MODULE_UNAVAILABLE",
+  );
+  const cases: Array<[string, unknown]> = [
+    ["OWNER_RESTORATION_DIAGNOSTIC_REQUIRED_SCHEMA_UNAVAILABLE", { code: "42P01", message: "raw table secret" }],
+    ["OWNER_RESTORATION_DIAGNOSTIC_REQUIRED_SCHEMA_UNAVAILABLE", { code: "42703", message: "raw column secret" }],
+    ["OWNER_RESTORATION_DIAGNOSTIC_QUERY_TIMEOUT", { code: "57014", message: "timeout host" }],
+    ["OWNER_RESTORATION_DIAGNOSTIC_QUERY_TIMEOUT", { code: "ETIMEDOUT", message: "timeout host" }],
+    ["OWNER_RESTORATION_DIAGNOSTIC_QUERY_PERMISSION_DENIED", { code: "42501", message: "permission player" }],
+    ["OWNER_RESTORATION_DIAGNOSTIC_QUERY_EXECUTION_UNAVAILABLE", { code: "XX000", message: "connection string" }],
+  ];
+  for (const [expected, error] of cases) assert.equal(diagnosticQueryFailureCode(error), expected);
+  assert.equal(diagnosticFailureCode(new Error("credential token host")), "OWNER_RESTORATION_DIAGNOSTIC_MODULE_UNAVAILABLE");
+  assert.equal(productionOwnerRestorationDiagnosticFailureCodes.length, 10);
+});
+
 test("exact moi projection is strict, opaque, stable, and environment-bound", () => {
   const production = account();
   assert.deepEqual(Object.keys(production).sort(), ["schemaVersion", "environment", "target", "selectionBasis", "username", "accountState", "grant", "fingerprint"].sort());
@@ -271,6 +295,7 @@ test("routes and UI are GET-only, exact-target, no-store, and contain no binding
   const diagnosticInternal = readFileSync("apps/sdk-portal/app/api/internal/recovery/production-private-workspace-owner-restoration/moi-lab2/completed-import-diagnostic/route.ts", "utf8");
   const store = readFileSync("apps/sdk-portal/lib/production-owner-restoration-store.ts", "utf8");
   const accountStore = readFileSync("lib/player-owner-restoration-admin-store.ts", "utf8");
+  const diagnosticErrors = readFileSync("lib/production-owner-restoration-diagnostic.ts", "utf8");
   const panel = readFileSync("app/site-admin/runtime-operations/production-private-workspace-import/moi-lab2/ProductionOwnerRestorationPanel.tsx", "utf8");
   assert.match(accountRoute + planRoute + diagnosticRoute, /requireFullSiteAdminSession/);
   assert.match(accountRoute + planRoute + diagnosticRoute + internal + diagnosticInternal, /private, no-store/);
@@ -292,6 +317,9 @@ test("routes and UI are GET-only, exact-target, no-store, and contain no binding
     "OWNER_RESTORATION_PLAN_INPUT_INVALID",
   ]) assert.match(planRoute + panel, new RegExp(code));
   assert.doesNotMatch(panel, /moi2|moiwai/);
+  for (const code of productionOwnerRestorationDiagnosticFailureCodes) {
+    assert.match(diagnosticRoute + diagnosticInternal + panel + diagnosticErrors, new RegExp(code));
+  }
   assert.match(diagnosticRoute + diagnosticInternal, /OWNER_RESTORATION_DIAGNOSTIC_UNAVAILABLE/);
   assert.doesNotMatch(diagnosticRoute + diagnosticInternal, /ensure(?:Sdk|Postgres)Schema|\b(?:INSERT|UPDATE|DELETE)\b/i);
 });
