@@ -31,6 +31,19 @@ type OwnerBindingPlan = {
   planReceipt: string;
 };
 
+type DiagnosticStatus = "pass" | "fail" | "not-assessed";
+type CompletionDiagnostic = {
+  schemaVersion: 1;
+  operationId: "06eb6940-fd24-59b0-8d00-47eba9a9ce8c";
+  database: { canonicalReaderSelector: string; diagnosticSelector: string; selectorMatch: boolean; canonicalReaderFingerprint: string | null; diagnosticFingerprint: string | null; fingerprintMatch: boolean };
+  tables: Record<"operations" | "workspaces" | "games" | "files", DiagnosticStatus>;
+  operation: { row: "absent" | "unique" | "multiple" | "not-assessed"; operationIdExact: DiagnosticStatus; nonceExact: DiagnosticStatus; environmentExact: DiagnosticStatus; intentExact: DiagnosticStatus; state: "completed" | "pending" | "other" | "ambiguous" | "not-assessed"; phase: "imported-private" | "ledger-recorded" | "other" | "ambiguous" | "not-assessed"; terminalReceiptPresent: DiagnosticStatus; readBackShaPresent: DiagnosticStatus };
+  workspace: { join: "absent" | "unique" | "multiple" | "not-assessed"; identityExact: DiagnosticStatus; targetExact: DiagnosticStatus; environmentExact: DiagnosticStatus; privateQuarantined: DiagnosticStatus; ownerUnbound: DiagnosticStatus };
+  integrity: Record<"bundleMatch" | "manifestMatch" | "ledgerMatch" | "remainingHashesMatch" | "games2" | "runtimeFiles21" | "runtimeBytesMatch" | "fileByteIntegrity", DiagnosticStatus>;
+  nonEffects: Record<"grants0" | "releases0" | "publications0" | "aliases0" | "rooms0", DiagnosticStatus>;
+  canonicalReader: { matched: boolean; excludedBy: Array<"TABLES" | "OPERATION" | "TERMINAL" | "WORKSPACE" | "INTEGRITY" | "NON_EFFECTS"> };
+};
+
 const fingerprintPattern = /^opf_v1_[A-Za-z0-9_-]{43}$/;
 const workspaceFingerprintPattern = /^wpf_v1_[A-Za-z0-9_-]{43}$/;
 const stateTokenPattern = /^wst_v1_[A-Za-z0-9_-]{43}$/;
@@ -84,6 +97,46 @@ function parsePlan(value: unknown, account: AccountProjection | null): OwnerBind
   return v as OwnerBindingPlan;
 }
 
+const diagnosticStatuses = new Set<DiagnosticStatus>(["pass", "fail", "not-assessed"]);
+const diagnosticExclusions = new Set(["TABLES", "OPERATION", "TERMINAL", "WORKSPACE", "INTEGRITY", "NON_EFFECTS"]);
+
+function diagnosticRecord(value: unknown, keys: string[]) {
+  const v = object(value);
+  return v && exactKeys(v, keys) ? v : null;
+}
+
+function statuses(value: Record<string, unknown> | null, keys: string[]) {
+  return !!value && keys.every((key) => diagnosticStatuses.has(value[key] as DiagnosticStatus));
+}
+
+function parseDiagnostic(value: unknown): CompletionDiagnostic | null {
+  const v = object(value); if (!v || !exactKeys(v, ["schemaVersion", "operationId", "database", "tables", "operation", "workspace", "integrity", "nonEffects", "canonicalReader"])) return null;
+  const database = diagnosticRecord(v.database, ["canonicalReaderSelector", "diagnosticSelector", "selectorMatch", "canonicalReaderFingerprint", "diagnosticFingerprint", "fingerprintMatch"]);
+  const tables = diagnosticRecord(v.tables, ["operations", "workspaces", "games", "files"]);
+  const operation = diagnosticRecord(v.operation, ["row", "operationIdExact", "nonceExact", "environmentExact", "intentExact", "state", "phase", "terminalReceiptPresent", "readBackShaPresent"]);
+  const workspace = diagnosticRecord(v.workspace, ["join", "identityExact", "targetExact", "environmentExact", "privateQuarantined", "ownerUnbound"]);
+  const integrity = diagnosticRecord(v.integrity, ["bundleMatch", "manifestMatch", "ledgerMatch", "remainingHashesMatch", "games2", "runtimeFiles21", "runtimeBytesMatch", "fileByteIntegrity"]);
+  const nonEffects = diagnosticRecord(v.nonEffects, ["grants0", "releases0", "publications0", "aliases0", "rooms0"]);
+  const reader = diagnosticRecord(v.canonicalReader, ["matched", "excludedBy"]);
+  if (!database || !tables || !operation || !workspace || !integrity || !nonEffects || !reader
+    || v.schemaVersion !== 1 || v.operationId !== "06eb6940-fd24-59b0-8d00-47eba9a9ce8c"
+    || typeof database.canonicalReaderSelector !== "string" || typeof database.diagnosticSelector !== "string"
+    || typeof database.selectorMatch !== "boolean" || typeof database.fingerprintMatch !== "boolean"
+    || (database.canonicalReaderFingerprint !== null && typeof database.canonicalReaderFingerprint !== "string")
+    || (database.diagnosticFingerprint !== null && typeof database.diagnosticFingerprint !== "string")
+    || !statuses(tables, ["operations", "workspaces", "games", "files"])
+    || !statuses(operation, ["operationIdExact", "nonceExact", "environmentExact", "intentExact", "terminalReceiptPresent", "readBackShaPresent"])
+    || !statuses(workspace, ["identityExact", "targetExact", "environmentExact", "privateQuarantined", "ownerUnbound"])
+    || !statuses(integrity, ["bundleMatch", "manifestMatch", "ledgerMatch", "remainingHashesMatch", "games2", "runtimeFiles21", "runtimeBytesMatch", "fileByteIntegrity"])
+    || !statuses(nonEffects, ["grants0", "releases0", "publications0", "aliases0", "rooms0"])
+    || !["absent", "unique", "multiple", "not-assessed"].includes(String(operation.row))
+    || !["completed", "pending", "other", "ambiguous", "not-assessed"].includes(String(operation.state))
+    || !["imported-private", "ledger-recorded", "other", "ambiguous", "not-assessed"].includes(String(operation.phase))
+    || !["absent", "unique", "multiple", "not-assessed"].includes(String(workspace.join))
+    || typeof reader.matched !== "boolean" || !Array.isArray(reader.excludedBy) || !reader.excludedBy.every((item) => typeof item === "string" && diagnosticExclusions.has(item))) return null;
+  return v as CompletionDiagnostic;
+}
+
 async function json(response: Response) { try { return await response.json(); } catch { return null; } }
 
 const safePlanErrorCodes = new Set([
@@ -108,9 +161,11 @@ function safePlanError(value: unknown) {
 export function ProductionOwnerRestorationPanel() {
   const [account, setAccount] = useState<AccountProjection | null>(null);
   const [plan, setPlan] = useState<OwnerBindingPlan | null>(null);
+  const [diagnostic, setDiagnostic] = useState<CompletionDiagnostic | null>(null);
   const [message, setMessage] = useState("");
   const [accountLocked, setAccountLocked] = useState(false);
   const [planLocked, setPlanLocked] = useState(false);
+  const [diagnosticLocked, setDiagnosticLocked] = useState(false);
 
   const readAccount = async () => {
     if (accountLocked) return;
@@ -142,6 +197,17 @@ export function ProductionOwnerRestorationPanel() {
     } catch { setMessage("write-free plan fail-closed: OWNER_RESTORATION_PLAN_UNAVAILABLE"); }
   };
 
+  const readDiagnostic = async () => {
+    if (diagnosticLocked) return;
+    setDiagnosticLocked(true); setMessage(""); setDiagnostic(null);
+    try {
+      const response = await fetch("/api/admin/sdk-production-private-workspace-owner-restoration/moi-lab2/completed-import-diagnostic", { method: "GET", cache: "no-store" });
+      const parsed = parseDiagnostic(await json(response));
+      if (!response.ok || !parsed) throw new Error();
+      setDiagnostic(parsed);
+    } catch { setMessage("completed-import diagnostic fail-closed: OWNER_RESTORATION_DIAGNOSTIC_UNAVAILABLE"); }
+  };
+
   return <section className="rounded-2xl border border-violet-300/30 bg-violet-300/10 p-5" data-production-owner-restoration>
     <h2 className="text-lg font-black">Owner restoration preparation</h2>
     <p className="mt-2 text-sm">operator-selected mapping: workspace <b>moi-lab2</b> → exact username <b>moi</b></p>
@@ -152,6 +218,16 @@ export function ProductionOwnerRestorationPanel() {
       <p className="font-black">EXACT ACCOUNT: UNIQUE</p>
       <p className="mt-2">username {account.username} / state {account.accountState} / grant {account.grant}</p>
       <p className="mt-2 break-all font-mono text-xs">fingerprint {account.fingerprint}</p>
+    </div>}
+    <button type="button" onClick={() => void readDiagnostic()} disabled={diagnosticLocked} className="mt-4 w-full rounded-xl border border-violet-200/40 px-4 py-3 font-black disabled:opacity-40">canonical completed-import diagnosticを1回確認</button>
+    {diagnostic && <div className="mt-4 rounded-xl border border-sky-300/30 bg-sky-300/10 p-4 text-sm" data-completed-import-diagnostic>
+      <p className="font-black">COMPLETED-IMPORT DIAGNOSTIC</p>
+      <p className="mt-2">canonical reader {diagnostic.canonicalReader.matched ? "MATCHED" : "EXCLUDED"} / exclusions {diagnostic.canonicalReader.excludedBy.join(",") || "none"}</p>
+      <p className="mt-2">operation {diagnostic.operation.row} / state {diagnostic.operation.state} / phase {diagnostic.operation.phase}</p>
+      <p className="mt-2">workspace join {diagnostic.workspace.join} / private-quarantined {diagnostic.workspace.privateQuarantined} / unbound {diagnostic.workspace.ownerUnbound}</p>
+      <p className="mt-2">bundle {diagnostic.integrity.bundleMatch} / manifest {diagnostic.integrity.manifestMatch} / ledger {diagnostic.integrity.ledgerMatch}</p>
+      <p className="mt-2">games 2 {diagnostic.integrity.games2} / runtime files 21 {diagnostic.integrity.runtimeFiles21} / non-effects grants {diagnostic.nonEffects.grants0} release {diagnostic.nonEffects.releases0} publication {diagnostic.nonEffects.publications0}</p>
+      <p className="mt-2 break-all font-mono text-xs">database selector match {String(diagnostic.database.selectorMatch)} / fingerprint match {String(diagnostic.database.fingerprintMatch)}</p>
     </div>}
     <button type="button" onClick={() => void readPlan()} disabled={planLocked} className="mt-4 w-full rounded-xl bg-violet-300 px-4 py-3 font-black text-slate-950 disabled:opacity-40">owner bindingのwrite-free planを1回確認</button>
     {plan && <div className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-4 text-sm" data-owner-binding-write-free-plan>

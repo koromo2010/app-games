@@ -12,7 +12,12 @@ import {
   productionPrivateWorkspaceImportObjectNames,
   productionPrivateWorkspaceImportSchemaStatements,
 } from "./production-private-workspace-import-schema.ts";
-import { sdkSql } from "./sdk-postgres.ts";
+import { createHash } from "node:crypto";
+import {
+  createSdkDatabaseBindingDiagnostic,
+  resolveSdkDatabaseBinding,
+} from "./sdk-database-binding-diagnostic.ts";
+import { sdkRuntimeSqlContext } from "./sdk-postgres.ts";
 
 type SnapshotRow = Record<string, unknown>;
 
@@ -63,8 +68,27 @@ function snapshotFrom(row: SnapshotRow): ProductionPrivateWorkspaceImportBeforeS
   };
 }
 
-async function productionTablesPresent() {
-  const sql = sdkSql();
+export type ProductionPrivateWorkspaceImportTablePresence = {
+  operations: boolean;
+  workspaces: boolean;
+  games: boolean;
+  files: boolean;
+};
+
+function tablePresenceFrom(values: Array<string | null | undefined>): ProductionPrivateWorkspaceImportTablePresence {
+  return {
+    operations: Boolean(values[0]),
+    workspaces: Boolean(values[1]),
+    games: Boolean(values[2]),
+    files: Boolean(values[3]),
+  };
+}
+
+function allProductionTablesPresent(presence: ProductionPrivateWorkspaceImportTablePresence) {
+  return Object.values(presence).every(Boolean);
+}
+
+async function productionTablePresence(sql: ReturnType<typeof sdkRuntimeSqlContext>["sql"]) {
   const rows = await sql`
     SELECT ARRAY[
       to_regclass('public.sdk_production_private_workspace_import_operations')::TEXT,
@@ -73,12 +97,12 @@ async function productionTablesPresent() {
       to_regclass('public.sdk_production_private_workspace_files')::TEXT
     ] AS objects
   ` as Array<{ objects?: Array<string | null> }>;
-  const objects = rows[0]?.objects ?? [];
-  const present = objects.filter(Boolean).length;
+  const presence = tablePresenceFrom(rows[0]?.objects ?? []);
+  const present = Object.values(presence).filter(Boolean).length;
   if (present !== 0 && present !== productionPrivateWorkspaceImportObjectNames.length) {
     throw new ProductionPrivateWorkspaceImportError("PRODUCTION_PRIVATE_IMPORT_UNAVAILABLE");
   }
-  return present === productionPrivateWorkspaceImportObjectNames.length;
+  return presence;
 }
 
 const baseSnapshot = `
@@ -147,8 +171,8 @@ function selectSnapshot(privateCtes: string, privateColumns: string) {
 export async function readProductionPrivateWorkspaceImportBeforeState(
   target: ProductionPrivateWorkspaceImportTarget,
 ) {
-  const sql = sdkSql();
-  const withTables = await productionTablesPresent();
+  const { sql } = sdkRuntimeSqlContext();
+  const withTables = allProductionTablesPresent(await productionTablePresence(sql));
   const query = withTables
     ? selectSnapshot(`
         target_workspaces AS MATERIALIZED (
@@ -199,12 +223,7 @@ function readBackFrom(row: CompletedRow): ProductionPrivateWorkspaceImportReadBa
   };
 }
 
-export async function readCompletedProductionPrivateWorkspaceImport(
-  operationId: string,
-): Promise<CompletedProductionPrivateWorkspaceImport | null> {
-  if (!await productionTablesPresent()) return null;
-  const sql = sdkSql();
-  const rows = await sql`
+const completedProductionPrivateWorkspaceImportSelect = `
     SELECT
       o.target_key AS target,
       o.operation_id::TEXT AS "operationId",
@@ -227,7 +246,8 @@ export async function readCompletedProductionPrivateWorkspaceImport(
       0::INTEGER AS "publicationRows", 0::INTEGER AS "aliasRows", 0::INTEGER AS "roomRows"
     FROM sdk_production_private_workspace_import_operations o
     JOIN sdk_production_private_workspaces w ON w.operation_id = o.operation_id
-    WHERE o.operation_id = ${operationId}::UUID
+    WHERE o.operation_id = $1::UUID
+      AND o.target_key = 'moi-lab2'
       AND o.operation_nonce = o.operation_id
       AND o.environment = 'production'
       AND o.intent = ${productionPrivateWorkspaceImportIntent}
@@ -253,9 +273,16 @@ export async function readCompletedProductionPrivateWorkspaceImport(
         WHERE g.workspace_id = w.workspace_id) = o.runtime_bytes
       AND (SELECT COUNT(*) FROM sdk_production_private_workspace_files f
         WHERE f.workspace_id = w.workspace_id AND octet_length(f.content_bytes) = f.byte_length) = o.runtime_file_count
-  ` as CompletedRow[];
+`;
+
+export async function readCompletedProductionPrivateWorkspaceImport(
+  operationId: string,
+): Promise<CompletedProductionPrivateWorkspaceImport | null> {
+  const { sql } = sdkRuntimeSqlContext();
+  if (!allProductionTablesPresent(await productionTablePresence(sql))) return null;
+  const rows = await sql.query(completedProductionPrivateWorkspaceImportSelect, [operationId]) as CompletedRow[];
   const row = rows[0];
-  if (!row || row.target !== "moi-lab2") return null;
+  if (!row) return null;
   return {
     target: "moi-lab2",
     operationId: token(row.operationId),
@@ -263,6 +290,329 @@ export async function readCompletedProductionPrivateWorkspaceImport(
     bundleSha256: token(row.bundleSha256),
     readBack: readBackFrom(row),
   };
+}
+
+type DiagnosticStatus = "pass" | "fail" | "not-assessed";
+type DiagnosticMultiplicity = "absent" | "unique" | "multiple" | "not-assessed";
+type DiagnosticOperationState = "completed" | "pending" | "other" | "ambiguous" | "not-assessed";
+type DiagnosticOperationPhase = "imported-private" | "ledger-recorded" | "other" | "ambiguous" | "not-assessed";
+
+export type ProductionPrivateWorkspaceImportCompletionDiagnostic = {
+  schemaVersion: 1;
+  operationId: string;
+  database: {
+    canonicalReaderSelector: string;
+    diagnosticSelector: string;
+    selectorMatch: boolean;
+    canonicalReaderFingerprint: string | null;
+    diagnosticFingerprint: string | null;
+    fingerprintMatch: boolean;
+  };
+  tables: {
+    operations: DiagnosticStatus;
+    workspaces: DiagnosticStatus;
+    games: DiagnosticStatus;
+    files: DiagnosticStatus;
+  };
+  operation: {
+    row: DiagnosticMultiplicity;
+    operationIdExact: DiagnosticStatus;
+    nonceExact: DiagnosticStatus;
+    environmentExact: DiagnosticStatus;
+    intentExact: DiagnosticStatus;
+    state: DiagnosticOperationState;
+    phase: DiagnosticOperationPhase;
+    terminalReceiptPresent: DiagnosticStatus;
+    readBackShaPresent: DiagnosticStatus;
+  };
+  workspace: {
+    join: DiagnosticMultiplicity;
+    identityExact: DiagnosticStatus;
+    targetExact: DiagnosticStatus;
+    environmentExact: DiagnosticStatus;
+    privateQuarantined: DiagnosticStatus;
+    ownerUnbound: DiagnosticStatus;
+  };
+  integrity: {
+    bundleMatch: DiagnosticStatus;
+    manifestMatch: DiagnosticStatus;
+    ledgerMatch: DiagnosticStatus;
+    remainingHashesMatch: DiagnosticStatus;
+    games2: DiagnosticStatus;
+    runtimeFiles21: DiagnosticStatus;
+    runtimeBytesMatch: DiagnosticStatus;
+    fileByteIntegrity: DiagnosticStatus;
+  };
+  nonEffects: {
+    grants0: DiagnosticStatus;
+    releases0: DiagnosticStatus;
+    publications0: DiagnosticStatus;
+    aliases0: DiagnosticStatus;
+    rooms0: DiagnosticStatus;
+  };
+  canonicalReader: {
+    matched: boolean;
+    excludedBy: Array<
+      | "TABLES"
+      | "OPERATION"
+      | "TERMINAL"
+      | "WORKSPACE"
+      | "INTEGRITY"
+      | "NON_EFFECTS"
+    >;
+  };
+};
+
+function diagnosticStatus(value: boolean, assessed: boolean): DiagnosticStatus {
+  return assessed ? value ? "pass" : "fail" : "not-assessed";
+}
+
+function diagnosticMultiplicity(value: unknown, assessed: boolean): DiagnosticMultiplicity {
+  if (!assessed) return "not-assessed";
+  const count = Number(value);
+  return count === 0 ? "absent" : count === 1 ? "unique" : Number.isSafeInteger(count) && count > 1 ? "multiple" : "not-assessed";
+}
+
+function all(row: Record<string, unknown>, key: string) {
+  return row[key] === true;
+}
+
+type CompletionDiagnosticDatabaseContext = Pick<ReturnType<typeof sdkRuntimeSqlContext>,
+  "selectedKey" | "fallbackUsed"> & {
+  databaseTargetFingerprint?: string;
+  databaseNameFingerprint?: string;
+};
+
+function safeDatabaseIdentityContext(context: Pick<ReturnType<typeof sdkRuntimeSqlContext>, "selectedKey" | "fallbackUsed">): CompletionDiagnosticDatabaseContext {
+  const binding = resolveSdkDatabaseBinding();
+  if (
+    binding.selectedKey !== context.selectedKey
+    || binding.fallbackUsed !== context.fallbackUsed
+    || !binding.databaseUrl
+  ) return context;
+  try {
+    const url = new URL(binding.databaseUrl);
+    if (
+      (url.protocol !== "postgres:" && url.protocol !== "postgresql:")
+      || !url.hostname
+      || !url.pathname.replace(/^\/+/, "")
+    ) return context;
+  } catch {
+    return context;
+  }
+  const safe = createSdkDatabaseBindingDiagnostic({
+    binding,
+    observedSchemaVersion: 0,
+    requiredSchemaVersion: 0,
+  });
+  if (
+    !safe.databaseTargetFingerprint
+    || !safe.databaseNameFingerprint
+    || !/^[a-f0-9]{64}$/.test(safe.databaseTargetFingerprint)
+    || !/^[a-f0-9]{64}$/.test(safe.databaseNameFingerprint)
+  ) return context;
+  return {
+    ...context,
+    databaseTargetFingerprint: safe.databaseTargetFingerprint,
+    databaseNameFingerprint: safe.databaseNameFingerprint,
+  };
+}
+
+function completionDatabaseFingerprint(context: CompletionDiagnosticDatabaseContext) {
+  if (!context.databaseTargetFingerprint || !context.databaseNameFingerprint) return null;
+  return `sdb_v1_${createHash("sha256")
+    .update([context.selectedKey, context.fallbackUsed, context.databaseTargetFingerprint, context.databaseNameFingerprint].join("|"))
+    .digest("base64url")}`;
+}
+
+function diagnosticState(
+  row: Record<string, unknown>,
+  multiplicity: DiagnosticMultiplicity,
+): { state: DiagnosticOperationState; phase: DiagnosticOperationPhase } {
+  if (multiplicity === "not-assessed") return { state: "not-assessed", phase: "not-assessed" };
+  if (multiplicity === "absent") return { state: "other", phase: "other" };
+  if (multiplicity === "multiple") return { state: "ambiguous", phase: "ambiguous" };
+  return {
+    state: all(row, "operationStateCompleted") ? "completed" : all(row, "operationStatePending") ? "pending" : "other",
+    phase: all(row, "operationPhaseImported") ? "imported-private" : all(row, "operationPhaseLedger") ? "ledger-recorded" : "other",
+  };
+}
+
+const productionPrivateWorkspaceImportDiagnosticSelect = `
+  WITH operation_rows AS MATERIALIZED (
+    SELECT * FROM sdk_production_private_workspace_import_operations WHERE operation_id = $1::UUID
+  ), workspace_rows AS MATERIALIZED (
+    SELECT w.*, o.target_key AS operation_target_key, o.bundle_bytes AS operation_bundle_bytes,
+      o.bundle_sha256 AS operation_bundle_sha256, o.bundle_schema_version AS operation_bundle_schema_version,
+      o.game_count AS operation_game_count, o.runtime_file_count AS operation_runtime_file_count,
+      o.runtime_bytes AS operation_runtime_bytes, o.game_identity_set_sha256 AS operation_game_identity_set_sha256,
+      o.per_game_identity_sha256 AS operation_per_game_identity_sha256,
+      o.content_set_sha256 AS operation_content_set_sha256,
+      o.workspace_manifest_sha256 AS operation_workspace_manifest_sha256,
+      o.per_game_ledger_sha256 AS operation_per_game_ledger_sha256
+    FROM sdk_production_private_workspaces w JOIN operation_rows o ON w.operation_id = o.operation_id
+  ), game_rows AS MATERIALIZED (
+    SELECT g.* FROM sdk_production_private_workspace_games g
+    WHERE g.workspace_id IN (SELECT workspace_id FROM workspace_rows)
+  ), file_rows AS MATERIALIZED (
+    SELECT f.* FROM sdk_production_private_workspace_files f
+    WHERE f.workspace_id IN (SELECT workspace_id FROM workspace_rows)
+  ), canonical_reader_rows AS MATERIALIZED (
+    ${completedProductionPrivateWorkspaceImportSelect}
+  )
+  SELECT
+    (SELECT COUNT(*) FROM operation_rows)::INTEGER AS "operationRows",
+    COALESCE((SELECT bool_and(operation_id::TEXT = $1) FROM operation_rows), FALSE) AS "operationIdExact",
+    COALESCE((SELECT bool_and(operation_nonce = operation_id) FROM operation_rows), FALSE) AS "nonceExact",
+    COALESCE((SELECT bool_and(environment = 'production') FROM operation_rows), FALSE) AS "operationEnvironmentExact",
+    COALESCE((SELECT bool_and(intent = '${productionPrivateWorkspaceImportIntent}') FROM operation_rows), FALSE) AS "intentExact",
+    COALESCE((SELECT bool_and(state = 'completed') FROM operation_rows), FALSE) AS "operationStateCompleted",
+    COALESCE((SELECT bool_and(state = 'pending') FROM operation_rows), FALSE) AS "operationStatePending",
+    COALESCE((SELECT bool_and(phase = 'imported-private') FROM operation_rows), FALSE) AS "operationPhaseImported",
+    COALESCE((SELECT bool_and(phase = 'ledger-recorded') FROM operation_rows), FALSE) AS "operationPhaseLedger",
+    COALESCE((SELECT bool_and(terminal_receipt IS NOT NULL) FROM operation_rows), FALSE) AS "terminalReceiptPresent",
+    COALESCE((SELECT bool_and(read_back_sha256 IS NOT NULL) FROM operation_rows), FALSE) AS "readBackShaPresent",
+    (SELECT COUNT(*) FROM workspace_rows)::INTEGER AS "workspaceRows",
+    COALESCE((SELECT bool_and(workspace_id = operation_id) FROM workspace_rows), FALSE) AS "workspaceIdentityExact",
+    COALESCE((SELECT bool_and(target_key = operation_target_key AND target_key = 'moi-lab2') FROM workspace_rows), FALSE) AS "workspaceTargetExact",
+    COALESCE((SELECT bool_and(environment = 'production') FROM workspace_rows), FALSE) AS "workspaceEnvironmentExact",
+    COALESCE((SELECT bool_and(visibility = 'private-quarantined') FROM workspace_rows), FALSE) AS "privateQuarantined",
+    COALESCE((SELECT bool_and(owner_binding_state = 'unbound') FROM workspace_rows), FALSE) AS "ownerUnbound",
+    COALESCE((SELECT bool_and(bundle_bytes = operation_bundle_bytes AND bundle_sha256 = operation_bundle_sha256
+      AND bundle_schema_version = operation_bundle_schema_version) FROM workspace_rows), FALSE) AS "bundleMatch",
+    COALESCE((SELECT bool_and(workspace_manifest_sha256 = operation_workspace_manifest_sha256) FROM workspace_rows), FALSE) AS "manifestMatch",
+    COALESCE((SELECT bool_and(per_game_ledger_sha256 = operation_per_game_ledger_sha256) FROM workspace_rows), FALSE) AS "ledgerMatch",
+    COALESCE((SELECT bool_and(game_identity_set_sha256 = operation_game_identity_set_sha256
+      AND per_game_identity_sha256 = operation_per_game_identity_sha256
+      AND content_set_sha256 = operation_content_set_sha256) FROM workspace_rows), FALSE) AS "remainingHashesMatch",
+    COALESCE((SELECT bool_and(operation_game_count = 2) FROM workspace_rows), FALSE)
+      AND (SELECT COUNT(*) FROM game_rows WHERE historical_restoration_claim = FALSE) = 2 AS "games2",
+    COALESCE((SELECT bool_and(operation_runtime_file_count = 21) FROM workspace_rows), FALSE)
+      AND (SELECT COUNT(*) FROM file_rows) = 21
+      AND COALESCE((SELECT SUM(runtime_file_count) FROM game_rows), 0) = 21 AS "runtimeFiles21",
+    COALESCE((SELECT bool_and(operation_runtime_bytes = (SELECT COALESCE(SUM(runtime_bytes), 0) FROM game_rows)) FROM workspace_rows), FALSE) AS "runtimeBytesMatch",
+    COALESCE((SELECT bool_and((SELECT COUNT(*) FROM file_rows WHERE octet_length(content_bytes) = byte_length) = operation_runtime_file_count) FROM workspace_rows), FALSE) AS "fileByteIntegrity",
+    COALESCE((SELECT bool_and(grants_created = 0) FROM workspace_rows), FALSE) AS "grants0",
+    COALESCE((SELECT bool_and(releases_created = 0) FROM workspace_rows), FALSE) AS "releases0",
+    COALESCE((SELECT bool_and(publications_created = 0) FROM workspace_rows), FALSE) AS "publications0",
+    COALESCE((SELECT bool_and(aliases_created = 0) FROM workspace_rows), FALSE) AS "aliases0",
+    COALESCE((SELECT bool_and(rooms_created = 0) FROM workspace_rows), FALSE) AS "rooms0",
+    (SELECT COUNT(*) = 1 FROM canonical_reader_rows) AS "canonicalReaderMatched"
+`;
+
+/**
+ * Runs a read-only, strict-allowlist diagnosis beside the canonical completed-import reader.
+ * The canonical reader SQL is embedded above as `canonical_reader_rows`; do not duplicate or relax it.
+ */
+export function projectCompletedProductionPrivateWorkspaceImportDiagnostic(input: {
+  operationId: string;
+  tablePresence: ProductionPrivateWorkspaceImportTablePresence;
+  databaseContext: CompletionDiagnosticDatabaseContext;
+  row?: Record<string, unknown>;
+}): ProductionPrivateWorkspaceImportCompletionDiagnostic {
+  const { operationId, tablePresence, databaseContext, row = {} } = input;
+  const tablesPresent = allProductionTablesPresent(tablePresence);
+  const bindingFingerprint = completionDatabaseFingerprint(databaseContext);
+  const database = {
+    canonicalReaderSelector: databaseContext.selectedKey,
+    diagnosticSelector: databaseContext.selectedKey,
+    selectorMatch: true,
+    canonicalReaderFingerprint: bindingFingerprint,
+    diagnosticFingerprint: bindingFingerprint,
+    fingerprintMatch: bindingFingerprint !== null,
+  };
+  const tables = {
+    operations: diagnosticStatus(tablePresence.operations, true),
+    workspaces: diagnosticStatus(tablePresence.workspaces, true),
+    games: diagnosticStatus(tablePresence.games, true),
+    files: diagnosticStatus(tablePresence.files, true),
+  } as const;
+  if (!tablesPresent) {
+    return {
+      schemaVersion: 1,
+      operationId,
+      database,
+      tables,
+      operation: { row: "not-assessed", operationIdExact: "not-assessed", nonceExact: "not-assessed", environmentExact: "not-assessed", intentExact: "not-assessed", state: "not-assessed", phase: "not-assessed", terminalReceiptPresent: "not-assessed", readBackShaPresent: "not-assessed" },
+      workspace: { join: "not-assessed", identityExact: "not-assessed", targetExact: "not-assessed", environmentExact: "not-assessed", privateQuarantined: "not-assessed", ownerUnbound: "not-assessed" },
+      integrity: { bundleMatch: "not-assessed", manifestMatch: "not-assessed", ledgerMatch: "not-assessed", remainingHashesMatch: "not-assessed", games2: "not-assessed", runtimeFiles21: "not-assessed", runtimeBytesMatch: "not-assessed", fileByteIntegrity: "not-assessed" },
+      nonEffects: { grants0: "not-assessed", releases0: "not-assessed", publications0: "not-assessed", aliases0: "not-assessed", rooms0: "not-assessed" },
+      canonicalReader: { matched: false, excludedBy: ["TABLES"] },
+    };
+  }
+
+  const operationRow = diagnosticMultiplicity(row.operationRows, true);
+  const workspaceJoin = diagnosticMultiplicity(row.workspaceRows, true);
+  const state = diagnosticState(row, operationRow);
+  const operation = {
+    row: operationRow,
+    operationIdExact: diagnosticStatus(all(row, "operationIdExact"), true),
+    nonceExact: diagnosticStatus(all(row, "nonceExact"), true),
+    environmentExact: diagnosticStatus(all(row, "operationEnvironmentExact"), true),
+    intentExact: diagnosticStatus(all(row, "intentExact"), true),
+    state: state.state,
+    phase: state.phase,
+    terminalReceiptPresent: diagnosticStatus(all(row, "terminalReceiptPresent"), true),
+    readBackShaPresent: diagnosticStatus(all(row, "readBackShaPresent"), true),
+  } as const;
+  const workspace = {
+    join: workspaceJoin,
+    identityExact: diagnosticStatus(all(row, "workspaceIdentityExact"), true),
+    targetExact: diagnosticStatus(all(row, "workspaceTargetExact"), true),
+    environmentExact: diagnosticStatus(all(row, "workspaceEnvironmentExact"), true),
+    privateQuarantined: diagnosticStatus(all(row, "privateQuarantined"), true),
+    ownerUnbound: diagnosticStatus(all(row, "ownerUnbound"), true),
+  } as const;
+  const integrity = {
+    bundleMatch: diagnosticStatus(all(row, "bundleMatch"), true),
+    manifestMatch: diagnosticStatus(all(row, "manifestMatch"), true),
+    ledgerMatch: diagnosticStatus(all(row, "ledgerMatch"), true),
+    remainingHashesMatch: diagnosticStatus(all(row, "remainingHashesMatch"), true),
+    games2: diagnosticStatus(all(row, "games2"), true),
+    runtimeFiles21: diagnosticStatus(all(row, "runtimeFiles21"), true),
+    runtimeBytesMatch: diagnosticStatus(all(row, "runtimeBytesMatch"), true),
+    fileByteIntegrity: diagnosticStatus(all(row, "fileByteIntegrity"), true),
+  } as const;
+  const nonEffects = {
+    grants0: diagnosticStatus(all(row, "grants0"), true),
+    releases0: diagnosticStatus(all(row, "releases0"), true),
+    publications0: diagnosticStatus(all(row, "publications0"), true),
+    aliases0: diagnosticStatus(all(row, "aliases0"), true),
+    rooms0: diagnosticStatus(all(row, "rooms0"), true),
+  } as const;
+  const excludedBy: ProductionPrivateWorkspaceImportCompletionDiagnostic["canonicalReader"]["excludedBy"] = [];
+  if (!database.selectorMatch || !database.fingerprintMatch) excludedBy.push("TABLES");
+  if (operation.row !== "unique" || operation.operationIdExact !== "pass" || operation.nonceExact !== "pass"
+    || operation.environmentExact !== "pass" || operation.intentExact !== "pass"
+    || operation.state !== "completed" || operation.phase !== "imported-private") excludedBy.push("OPERATION");
+  if (operation.terminalReceiptPresent !== "pass" || operation.readBackShaPresent !== "pass") excludedBy.push("TERMINAL");
+  if (workspace.join !== "unique" || workspace.identityExact !== "pass" || workspace.targetExact !== "pass"
+    || workspace.environmentExact !== "pass" || workspace.privateQuarantined !== "pass" || workspace.ownerUnbound !== "pass") excludedBy.push("WORKSPACE");
+  if (Object.values(integrity).some((value) => value !== "pass")) excludedBy.push("INTEGRITY");
+  if (Object.values(nonEffects).some((value) => value !== "pass")) excludedBy.push("NON_EFFECTS");
+  const matched = all(row, "canonicalReaderMatched") && excludedBy.length === 0;
+  return { schemaVersion: 1, operationId, database, tables, operation, workspace, integrity, nonEffects, canonicalReader: { matched, excludedBy } };
+}
+
+/**
+ * Runs a read-only, strict-allowlist diagnosis beside the canonical completed-import reader.
+ * The canonical reader SQL is embedded above as `canonical_reader_rows`; do not duplicate or relax it.
+ */
+export async function diagnoseCompletedProductionPrivateWorkspaceImport(
+  operationId: string,
+): Promise<ProductionPrivateWorkspaceImportCompletionDiagnostic> {
+  const context = sdkRuntimeSqlContext();
+  const tablePresence = await productionTablePresence(context.sql);
+  const tablesPresent = allProductionTablesPresent(tablePresence);
+  const row = tablesPresent
+    ? (await context.sql.query(productionPrivateWorkspaceImportDiagnosticSelect, [operationId]) as Array<Record<string, unknown>>)[0] ?? {}
+    : undefined;
+  return projectCompletedProductionPrivateWorkspaceImportDiagnostic({
+    operationId,
+    tablePresence,
+    databaseContext: safeDatabaseIdentityContext(context),
+    row,
+  });
 }
 
 type ExecutionRow = CompletedRow & { result?: unknown; replayed?: unknown; terminalReceipt?: unknown };
@@ -273,7 +623,7 @@ export async function importProductionPrivateWorkspaceAtomic(
   if (input.faultAt === "before-ledger") {
     throw new ProductionPrivateWorkspaceImportError("PRODUCTION_PRIVATE_IMPORT_UNAVAILABLE");
   }
-  const sql = sdkSql();
+  const sql = sdkRuntimeSqlContext().sql;
   const games = input.bundle.games.map((game) => ({
     gameId: game.gameId,
     reconstructionMode: game.reconstructionMode,
