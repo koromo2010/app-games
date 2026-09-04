@@ -39,7 +39,7 @@ module-boundな操作プロトタイプ作成後にAIが記入し、利用者へ
 | 視点・フェーズ・異常状態切替 | 未記入 | 未記入 |
 | 進行中断とロビー復帰 | 未記入 | 未記入 |
 
-## 共通moduleの人間レビューと利用証拠
+## 共通module contractと利用証拠
 
 - 初期状態: 全件必須
 - 承認後の正本: `get_game_module_requirements`が返す`requiredModuleIds`

@@ -7,8 +7,8 @@
 1. `APP_REQUIREMENTS.md`、`SDK_MODULE_CATALOG.md`、`GAME_SPEC.md`、`MOCK_GUIDE.md`、`SDK_API.md`を読む。
 2. ゲームの核が決まるまでは自然に対話し、面白さ・人数・勝敗が決まったら詳細案を一括提示する。
 3. 「おまかせ」「未定」を安全な初期値で補い、`GAME_SPEC.md`へAI判断と分かる形で記録する。
-4. 仕様確定後はgame draftだけを作り、人間がPortalでmodule profileを確定するまでUI、AppSet、adapterを実装しない。
-5. 確定済み`moduleProfileRevision`・`moduleContractDigest`・SDK versionを固定し、required moduleをdelivery別の公式SDK契約で実利用する。available moduleは必要な場合だけ公式契約で利用し、disabled moduleや同等の独自処理を使わない。
+4. 仕様確定後はgame draftを作り、`system-default`由来の初期module contractなら人間確認を待たずに進む。初期profileを変更する場合だけproposalを作り、Portalで本人が明示確定するまでUI、AppSet、adapterを実装しない。初期自動確定を人間確認済みと記録しない。
+5. 初期デフォルトまたは人間が変更確定した`moduleProfileRevision`・`moduleContractDigest`・SDK versionを固定し、required moduleをdelivery別の公式SDK契約で実利用する。available moduleは必要な場合だけ公式契約で利用し、disabled moduleや同等の独自処理を使わない。
 6. ゲーム固有AppSet、閲覧者別View、共有`game-client.tsx`、prototype adapter、契約テストを一緒に実装する。
 7. ローカルNode.jsが既にある場合は`npm run check`、`npm run demo`、`npm run diagnose:promotion`を追加検証として成功させる。インストールを標準経路の前提にしない。
 8. OAuth接続済みGame Fields SDK MCPの`publish_game_source_package`、または検査済み`game-package/`を渡す`publish_game_package`を使う。アクセストークンや管理トークンを取得・表示・保存しない。
@@ -50,7 +50,7 @@ MCPの`publish_mock`は互換tool名で、確定module contractと共有source�
 ## 実装の順番
 
 1. `GAME_SPEC.md`を完成させる。
-2. `create_game_draft`でmetadataだけを作り、人間のmodule profile確定を待つ。
+2. `create_game_draft`でmetadataとsystem-default初期module contractを作る。初期デフォルトのままなら停止せず、構成変更時だけ人間のproposal確定を待つ。
 3. `get_game_module_requirements`のrevision/digest/SDK versionとdelivery契約を固定する。
 4. `mock/preview.json`と`src/manifest.ts`を同じゲームIDへ更新する。
 5. `contracts.ts`へsettings、AppState、AppInput、AppCommand、AppViewを定義する。

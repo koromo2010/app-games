@@ -19,7 +19,6 @@ import {
 import {
   creatorVisibleGameSdkModuleProfile,
   normalizeGameSdkModuleProfile,
-  updateGameSdkModuleProfile,
   type CreatorGameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
 
@@ -196,7 +195,13 @@ export async function listAccountGames(ownerPlayerId: string) {
         AND prototype_revision = g.mock_approved_revision
         AND shared_source_sha256 = g.prototype_source_sha256
         AND sdk_package_version = g.sdk_package_version
-        AND g.module_profile_confirmed_at IS NOT NULL
+        AND g.module_contract_digest IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM sdk_game_module_profile_proposals p
+          WHERE p.game_row_id = g.id
+            AND p.status = 'pending'
+        )
       ORDER BY created_at DESC
       LIMIT 1
     ) candidate ON TRUE
@@ -284,7 +289,13 @@ export async function listCreatorGames(slug: string) {
         AND prototype_revision = g.mock_approved_revision
         AND shared_source_sha256 = g.prototype_source_sha256
         AND sdk_package_version = g.sdk_package_version
-        AND g.module_profile_confirmed_at IS NOT NULL
+        AND g.module_contract_digest IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM sdk_game_module_profile_proposals p
+          WHERE p.game_row_id = g.id
+            AND p.status = 'pending'
+        )
       ORDER BY created_at DESC, revision DESC
       LIMIT 1
     ) candidate ON TRUE
@@ -422,50 +433,5 @@ async function getStoredGameModuleProfile(
     | undefined;
   return row
     ? normalizeGameSdkModuleProfile(row.modulePolicy)
-    : null;
-}
-
-export async function updateCreatorGameModuleProfile(input: {
-  slug: string;
-  gameId: string;
-  ownerPlayerId: string;
-  updates: unknown;
-}): Promise<CreatorGameSdkModuleProfile | null> {
-  await ensureSdkSchema();
-  const current = await getStoredGameModuleProfile(
-    input.slug,
-    input.gameId,
-  );
-  if (!current) return null;
-  const next = updateGameSdkModuleProfile(current, input.updates);
-  const rows = await sdkSql()`
-    UPDATE sdk_games g
-    SET module_policy = ${JSON.stringify(next)}::jsonb,
-        module_profile_revision = gen_random_uuid(),
-        module_contract_digest = NULL,
-        module_profile_confirmed_at = NULL,
-        module_profile_confirmed_by_player_id = NULL,
-        prototype_module_profile_revision = NULL,
-        prototype_module_contract_digest = NULL,
-        prototype_sdk_package_version = NULL,
-        prototype_source_sha256 = NULL,
-        mock_revision = NULL,
-        mock_approved_revision = NULL,
-        mock_approved_at = NULL,
-        mock_approved_by_player_id = NULL,
-        updated_at = NOW()
-    FROM sdk_creators c
-    WHERE g.creator_id = c.id
-      AND c.slug = ${input.slug}
-      AND c.owner_player_id = ${input.ownerPlayerId}
-      AND g.game_id = ${input.gameId}
-      AND g.deleted_at IS NULL
-    RETURNING g.module_policy AS "modulePolicy"
-  `;
-  const saved = (Array.isArray(rows) ? rows[0] : undefined) as
-    | { modulePolicy?: unknown }
-    | undefined;
-  return saved
-    ? creatorVisibleGameSdkModuleProfile(saved.modulePolicy)
     : null;
 }

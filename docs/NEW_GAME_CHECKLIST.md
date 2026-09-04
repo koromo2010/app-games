@@ -4,7 +4,7 @@
 
 1. `config/game-registry.json` に最初にゲームを登録する。
    - `npm run create-game -- <game-id> "表示名"`で作ったonline-roomゲームは、`SDK基本セット + アプリセット`の境界を維持する。`<game-id>-app-set.ts`にはゲーム固有state・Command・勝敗・固有Viewだけを置き、`<game-id>-server-module.ts`は`createGameSdkOnlineRoomModule`による合成だけにする。
-   - SDKモックは共通moduleを全件必須で開始する。制作AIは採否を宣言・変更せず、環境所有者がSDK-devで理由付き解除した場合だけ`get_game_module_requirements`の確定profileへ従う。Platform固定moduleは解除不可とする。
+   - SDKモックは`createInitialGameSdkModuleProfile()`の現行デフォルトを`system-default`由来の初期contractとして開始する。この初期確定を人間確認済みとは記録しない。制作AIは採否を独断で変更せず、差分が必要な場合はmodule proposalを作り、環境所有者がSDK-devで明示承認した後の`get_game_module_requirements`へ従う。Platform固定moduleは解除不可とする。
    - Commandのpayloadへactor IDを本人証明として入れず、Runtimeが署名済みセッションから注入するactorを使う。保存Roomは必ず閲覧者別presentationを通す。
    - `createGameSdkMockRuntime`の契約テストで、ホスト以外の拒否、古いrevision、秘密情報の遮断を確認する。
 2. `playMode` を `online-room` または `local-pass-and-play` から選ぶ。

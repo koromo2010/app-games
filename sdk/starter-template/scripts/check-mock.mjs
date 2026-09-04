@@ -112,4 +112,4 @@ if (usesContentSource) {
   }
 }
 
-console.log("[mock] 仕様、ゲーム固有slot、共通UI非重複、正式Room接続、全module必須profileのPlatform所有を確認しました。");
+console.log("[mock] 仕様、ゲーム固有slot、共通UI非重複、正式Room接続、system-default初期contractのPlatform所有を確認しました。");

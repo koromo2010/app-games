@@ -3,7 +3,6 @@ import {
   authenticateCreatorOwner,
   getCreatorGameModuleProfile,
   normalizeInstanceSlug,
-  updateCreatorGameModuleProfile,
   validateInstanceSlug,
 } from "@/lib/instance-registry";
 import { getCreatorModuleCustomizationAccess } from "@/lib/module-customization-access";
@@ -17,10 +16,16 @@ import {
   creatorGameModuleAuthoringSummary,
   getCreatorGameModuleAuthoringState,
 } from "@/lib/module-authoring-store";
+import {
+  creatorModuleProfileProposalView,
+  prepareCreatorGameModuleProfileUpdate,
+} from "@/lib/module-profile-proposal-store";
+import { sdkPortalReleaseProfile } from "@/lib/sdk-release-profile";
 
 export const dynamic = "force-dynamic";
 
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function requestIdentity(
   context: {
@@ -68,6 +73,13 @@ export async function GET(
       { status: 403 },
     );
   }
+  if (!identity.creatorId) {
+    return Response.json(
+      { saved: false, error: "owner_required" },
+      { status: 403 },
+    );
+  }
+  const creatorId = identity.creatorId;
   const moduleProfile = await getCreatorGameModuleProfile(
     identity.slug,
     identity.gameId,
@@ -90,12 +102,10 @@ export async function GET(
       })
     ).allowed,
     editableByAi: false,
-    moduleContract: identity.creatorId
-      ? creatorGameModuleAuthoringSummary(await getCreatorGameModuleAuthoringState({
-        creatorId: identity.creatorId,
-        gameId: identity.gameId,
-      }))
-      : null,
+    moduleContract: creatorGameModuleAuthoringSummary(await getCreatorGameModuleAuthoringState({
+      creatorId,
+      gameId: identity.gameId,
+    })),
   });
 }
 
@@ -124,6 +134,13 @@ export async function PATCH(
       { status: 403 },
     );
   }
+  if (!identity.creatorId) {
+    return Response.json(
+      { saved: false, error: "owner_required" },
+      { status: 403 },
+    );
+  }
+  const creatorId = identity.creatorId;
   const customizationAccess = await getCreatorModuleCustomizationAccess({
     creatorSlug: identity.slug,
     ownerPlayerId: identity.playerId,
@@ -136,36 +153,67 @@ export async function PATCH(
   }
   const body = await request.json().catch(() => null) as {
     updates?: unknown;
+    requestId?: unknown;
   } | null;
+  const requestId = typeof body?.requestId === "string"
+    ? body.requestId.trim()
+    : "";
+  if (!UUID_PATTERN.test(requestId)) {
+    return Response.json(
+      { saved: false, error: "invalid_request_id" },
+      { status: 400 },
+    );
+  }
   try {
-    const moduleProfile = await updateCreatorGameModuleProfile({
-      slug: identity.slug,
+    const preparation = await prepareCreatorGameModuleProfileUpdate({
+      creatorId,
       gameId: identity.gameId,
-      ownerPlayerId: identity.playerId,
-      updates: body?.updates,
+      proposerClient: "Portal Owner",
+      proposerPlayerId: identity.playerId,
+      environment: sdkPortalReleaseProfile(new URL(request.url).origin).environment,
+      origin: new URL(request.url).origin,
+      requestId,
+      specification: null,
+      moduleDecisions: body?.updates,
     });
-    if (!moduleProfile) {
-      return Response.json(
-        { saved: false, error: "not_found" },
-        { status: 404 },
-      );
+    if (preparation.kind === "unchanged") {
+      return Response.json({
+        saved: true,
+        noChange: true,
+        activeProfileChanged: false,
+        humanConfirmationRequired: false,
+        moduleContract: creatorGameModuleAuthoringSummary(
+          await getCreatorGameModuleAuthoringState({
+            creatorId,
+            gameId: identity.gameId,
+          }),
+        ),
+      });
     }
+    const proposal = creatorModuleProfileProposalView(preparation.proposal);
+    const reviewUrl = `/${encodeURIComponent(identity.slug)}/games/${encodeURIComponent(identity.gameId)}/module-proposals/${encodeURIComponent(proposal.id)}`;
+    const moduleContract = creatorGameModuleAuthoringSummary(
+      await getCreatorGameModuleAuthoringState({
+        creatorId,
+        gameId: identity.gameId,
+      }),
+    );
     return Response.json({
       saved: true,
-      moduleProfile,
-      requiredModuleIds: creatorRequiredGameSdkModuleIds(moduleProfile),
-      classification: classifyCreatorGameModules(moduleProfile),
+      noChange: false,
+      activeProfileChanged: false,
+      proposal,
+      reviewUrl,
+      moduleContract,
+      humanConfirmationRequired: true,
       editableByAi: false,
-      moduleContract: identity.creatorId
-        ? creatorGameModuleAuthoringSummary(await getCreatorGameModuleAuthoringState({
-          creatorId: identity.creatorId,
-          gameId: identity.gameId,
-        }))
-        : null,
     });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
-    if (code === "GAME_SDK_MODULE_CHANGE_NOT_ALLOWED") {
+    if (
+      code === "GAME_SDK_MODULE_CHANGE_NOT_ALLOWED"
+      || code === "GAME_SDK_PROPOSAL_ALREADY_PENDING"
+    ) {
       return Response.json(
         { saved: false, error: "module_change_not_allowed" },
         { status: 409 },
@@ -175,6 +223,7 @@ export async function PATCH(
       code === "GAME_SDK_INVALID_MODULE_DECISION"
       || code === "GAME_SDK_UNKNOWN_MODULE"
       || code === "GAME_SDK_MODULE_UPDATES_REQUIRED"
+      || code === "GAME_SDK_PROPOSAL_DECISIONS_REQUIRED"
     ) {
       return Response.json(
         { saved: false, error: "invalid_module_update" },
@@ -211,7 +260,13 @@ export async function POST(
       playerId: identity.playerId,
       origin: new URL(request.url).origin,
     });
-    return Response.json({ confirmed: true, moduleContract, editableByAi: false });
+    return Response.json({
+      confirmed: moduleContract.moduleContractState?.establishmentKind === "human-confirmation",
+      contractEstablished: true,
+      confirmationRecorded: moduleContract.confirmationRecorded,
+      moduleContract,
+      editableByAi: false,
+    });
   } catch (error) {
     const code = error instanceof Error ? error.message : "temporarily_unavailable";
     return Response.json({ confirmed: false, error: code }, { status: code === "MODULE_PROFILE_STALE" ? 409 : 503 });

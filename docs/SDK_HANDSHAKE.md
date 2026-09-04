@@ -143,10 +143,20 @@ clientは自動的に別environment、旧版、非公式mirrorへ切り替えな
 | owner mismatch | `SDK_OWNER_REQUIRED` | `authorization` | `requirements-owner` |
 | invalid game ID | `GAME_SDK_GAME_ID_INVALID` | `validation` | `requirements-input` |
 | draft missing | `GAME_SDK_DRAFT_NOT_FOUND` | `validation` | `requirements-contract` |
-| profile unconfirmed | `MODULE_PROFILE_NOT_CONFIRMED` | `validation` | `requirements-contract` |
+| changed profile unconfirmed | `MODULE_PROFILE_NOT_CONFIRMED` | `validation` | `requirements-contract` |
 | stale digest | `MODULE_PROFILE_STALE` | `validation` | `requirements-contract` |
 
 成功時のrequirements payload、creator-facing governance projection、hidden platform moduleの非露出は変更しない。
+
+新規game draftは`createInitialGameSdkModuleProfile()`のcanonical profileとdigestを
+`initial-default` / `system-default`由来の初期contractとして保存する。この状態は
+人間確認ではなく、`module_profile_confirmed_at`と人間actorを持たない。初期profileと
+canonicalに同一な間は`get_game_module_requirements`と`publish_mock`へ進める。
+profileに差分を提案した場合だけ、active contractを維持したまま人間reviewを要求し、
+`changeConfirmationState=pending-human-confirmation`、
+`prototypeAuthoringAllowed=false`としてrequirements、`publish_mock`、prototype承認、
+package候補作成・提出を停止する。承認後のrevision・digestへ切り替えるか、proposalを
+却下した後にだけ制作を再開する。
 
 ## Versioning
 

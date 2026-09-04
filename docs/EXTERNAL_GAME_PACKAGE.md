@@ -144,7 +144,7 @@ SDK専用Vercel Project `app-games-sdk`は同一Gitリポジトリへ接続済�
 
 この分離moduleはserver契約と汎用Room transportの境界fixtureであり、現行ワードウルフの代替完成品ではない。SDK-devの公式ワードウルフは現行`WordWolfGame`そのものを表示する受け入れ基準へ切り替えた。今後もこの基準を保ち、現行版で再利用可能性を確認した共通UI・時間管理・DEBUG・結果導線をSDK基本セットへ順に追加する。
 
-共通モジュールは`@game-fields/game-sdk/modules`の一つのcatalogへ集約する。進行・共通部品は原則必須で開始し、制作AIが削除proposalを作成しても、署名済み環境所有者の確認まではactive profileを変えない。`content-source`はPlatform共通DB標準として固定し、`llm`・`playing-cards`・`drawing`は使用を強制も禁止もしないavailable resourceとする。モック再発行では人間レビューを上書きしない。
+共通モジュールは`@game-fields/game-sdk/modules`の一つのcatalogへ集約する。進行・共通部品は原則必須で開始し、新規game draftではこのcanonical defaultを`system-default`由来の初期contractとして自動確定する。人間確認済みとは記録しない。制作AIまたは制作者が変更proposalを作成しても、署名済み環境所有者の明示確認まではactive profileを変えない。`content-source`はPlatform共通DB標準として固定し、`llm`・`playing-cards`・`drawing`は使用を強制も禁止もしないavailable resourceとする。モック再発行では人間レビューを上書きしない。
 
 catalogは採用方針であり、それだけを表示して実装済みとは判定しない。SDK-devは`app/sdk-preview/[creatorSlug]/games/[gameId]/sdk-preview-module-registry.ts`で全module IDを具体的な本体共通部品、SDK helper、または隔離Preview adapterへ解決する。必須IDに実装割当がない場合はPreview合成を失敗させ、`39/39`の件数表示だけで完成扱いにしない。画面を持たない進行helperやリソースも、共通モジュール確認画面から実行または表示を確認できる状態にする。
 

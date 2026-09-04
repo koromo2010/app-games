@@ -37,7 +37,7 @@ export default async function ModuleProfileProposalPage({ params }: { params: Pr
       <div className="header-account-area"><AccountMenu /></div>
     </header>
     <section className="dashboard-main">
-      <div className="dashboard-heading"><div><p className="eyebrow">HUMAN REVIEW ONLY</p><h1>module構成変更案</h1><p>creator {slug} · game {gameId} · proposal {proposal.id}</p><p>{proposalView.approvalAllowed ? "AIが保存した公開可能な変更案を確認・編集し、本人の明示承認でのみactive profileへ反映します。" : "この変更案は現在の構成ルールでは確認・編集・承認できません。proposalの識別子と状態だけを保持しています。"}</p></div><Link className="secondary-action" href={`/${slug}/games/${gameId}?view=modules`}>module設定へ戻る</Link></div>
+      <div className="dashboard-heading"><div><p className="eyebrow">HUMAN REVIEW ONLY</p><h1>module構成変更案</h1><p>creator {slug} · game {gameId} · proposal {proposal.id}</p><p>{proposalView.approvalAllowed ? "AIまたはPortalで制作者が準備した変更案を確認・編集し、本人の明示承認でのみactive profileへ反映します。初期デフォルトの自動確定とは別の記録です。" : "この変更案は現在の構成ルールでは確認・編集・承認できません。proposalの識別子と状態だけを保持しています。"}</p></div><Link className="secondary-action" href={`/${slug}/games/${gameId}?view=modules`}>module設定へ戻る</Link></div>
       <ModuleProfileProposalReview
         initialProposal={proposalView}
         initialAudit={creatorModuleProfileProposalAuditView(audit)}

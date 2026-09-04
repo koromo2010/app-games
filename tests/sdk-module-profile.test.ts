@@ -85,7 +85,9 @@ test("only the linked human owner route can mutate module requirements", () => {
   );
   assert.match(route, /getSdkAccountPlayerId/);
   assert.match(route, /authenticateCreatorOwner/);
-  assert.match(route, /updateCreatorGameModuleProfile/);
+  assert.match(route, /prepareCreatorGameModuleProfileUpdate/);
+  assert.match(route, /proposerClient: "Portal Owner"/);
+  assert.match(route, /activeProfileChanged: false/);
   assert.match(route, /confirmCreatorGameModuleProfile/);
   assert.match(route, /humanConfirmed/);
   assert.doesNotMatch(route, /Bearer/);
@@ -93,7 +95,7 @@ test("only the linked human owner route can mutate module requirements", () => {
   const mcp = read("apps/sdk-portal/app/api/mcp/route.ts");
   assert.match(mcp, /create_game_draft/);
   assert.match(mcp, /get_game_module_requirements/);
-  assert.match(mcp, /requireConfirmedCreatorGameModuleContract/);
+  assert.match(mcp, /requireEstablishedCreatorGameModuleContract/);
   assert.match(mcp, /moduleProfileRevision/);
   assert.match(mcp, /moduleContractDigest/);
   assert.match(mcp, /editableByAi: false/);
@@ -207,8 +209,9 @@ test("SDK dev preview exposes the owner-only module review surface", () => {
   assert.match(page, /resolveCreatorOwner/);
   assert.match(page, /getCreatorModuleCustomizationAccess/);
   assert.match(page, /GameModuleReview/);
-  assert.match(review, /HUMAN REVIEW ONLY/);
-  assert.match(review, /制作GPTには確定後のpackage向け契約だけを渡します/);
+  assert.match(review, /INITIAL DEFAULT \/ HUMAN REVIEW ON CHANGE/);
+  assert.match(review, /初期デフォルトはsystem-default由来のcontractとして自動確定/);
+  assert.match(review, /module変更案を作成/);
   assert.match(review, /GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG/);
   assert.match(review, /canCustomize/);
 
@@ -222,13 +225,14 @@ test("SDK dev preview exposes the owner-only module review surface", () => {
 
 test("changing a module profile invalidates prototype approval and hides stale package candidates", () => {
   const registry = read("apps/sdk-portal/lib/instance-registry.ts");
+  const proposalStore = read("apps/sdk-portal/lib/module-profile-proposal-store.ts");
   const submit = read(
     "apps/sdk-portal/app/api/dashboard/games/[instanceId]/[gameId]/submit/route.ts",
   );
-  assert.match(registry, /module_profile_revision = gen_random_uuid\(\)/);
-  assert.match(registry, /module_contract_digest = NULL/);
-  assert.match(registry, /mock_revision = NULL/);
-  assert.match(registry, /mock_approved_revision = NULL/);
+  assert.match(proposalStore, /const nextRevision = randomUUID\(\)/);
+  assert.match(proposalStore, /module_profile_revision = \$\{nextRevision\}::uuid/);
+  assert.match(proposalStore, /mock_approved_revision = NULL/);
+  assert.match(proposalStore, /prototype_module_contract_digest = NULL/);
   for (const source of [registry, submit]) {
     assert.match(source, /module_profile_revision = g\.module_profile_revision/);
     assert.match(source, /module_contract_digest = g\.module_contract_digest/);

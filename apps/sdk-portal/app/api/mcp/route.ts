@@ -51,7 +51,9 @@ import { GameSdkModuleUsageValidationError, validateGameSdkModuleUsage } from "@
 import { PUBLISH_MOCK_TOOL_DEFINITION } from "@/lib/sdk-mcp-tool-definitions";
 import {
   createCreatorGameDraft,
-  requireConfirmedCreatorGameModuleContract,
+  creatorGameModuleAuthoringSummary,
+  getCreatorGameModuleAuthoringState,
+  requireEstablishedCreatorGameModuleContract,
 } from "@/lib/module-authoring-store";
 import {
   creatorModuleProfileProposalAuditView,
@@ -189,13 +191,13 @@ const baseTools = [
   { name: "check_creator_url", title: "制作者URLの空き確認", description: "Game Fields SDKの制作者URL名が利用可能か確認します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確認する制作者URL名" } }, required: ["slug"], additionalProperties: false } },
   { name: "reserve_creator_url", title: "制作者URLの予約", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "予約する制作者URL名" }, displayName: { type: "string", description: "制作者の表示名" } }, required: ["slug", "displayName"], additionalProperties: false } },
   { name: "finalize_creator_url", title: "制作者URLの確定", description: "予約トークンを使い、制作者URLをログイン中のアカウントへ正式登録します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確定する制作者URL名" }, reservationToken: { type: "string", description: "予約時に発行されたトークン" } }, required: ["slug", "reservationToken"], additionalProperties: false } },
-  { name: "create_game_draft", title: "module確認用game draft作成", description: "ゲーム仕様のcore loop確定後、操作プロトタイプより先に本人所有環境へmetadataとGame Fields所有の初期module profileだけを作り、人間用module review URLを返します。prototypeやpackageは保存しません。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, title: { type: "string", minLength: 1, maxLength: 120 }, description: { type: "string", maxLength: 500 }, playMode: { type: "string", const: "online-room" }, minimumPlayers: { type: "integer", minimum: 1, maximum: 20 }, maximumPlayers: { type: "integer", minimum: 1, maximum: 20 } }, required: ["slug", "gameId", "title", "description", "playMode", "minimumPlayers", "maximumPlayers"], additionalProperties: false } },
+  { name: "create_game_draft", title: "初期module contract付きgame draft作成", description: "ゲーム仕様のcore loop確定後、本人所有環境へmetadataとGame Fields所有のdefault module profileを作り、system-default由来の初期contractとして確定します。人間確認を偽装せず、module変更時だけ別の人間reviewが必要です。prototypeやpackageは保存しません。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, title: { type: "string", minLength: 1, maxLength: 120 }, description: { type: "string", maxLength: 500 }, playMode: { type: "string", const: "online-room" }, minimumPlayers: { type: "integer", minimum: 1, maximum: 20 }, maximumPlayers: { type: "integer", minimum: 1, maximum: 20 } }, required: ["slug", "gameId", "title", "description", "playMode", "minimumPlayers", "maximumPlayers"], additionalProperties: false } },
   { name: "prepare_module_profile_update", ...prepareModuleProfileUpdateToolDefinition },
   { name: "get_module_update_status", ...moduleUpdateStatusToolDefinition },
   { name: "get_game_module_profile_proposal", title: "module構成変更案の取得", description: "保存済みのmodule構成変更案について、現在のgovernanceで公開可能な差分とreview状態を取得します。互換性のないlegacy差分の内容は返しません。承認・active profile更新は行いません。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, proposalId: { type: "string", format: "uuid" } }, required: ["slug", "gameId", "proposalId"], additionalProperties: false } },
   { name: "publish_mock", ...PUBLISH_MOCK_TOOL_DEFINITION },
   { name: "approve_mock", title: "人間確認済み操作プロトタイプの承認", description: "互換tool名です。利用者本人が主要操作、状態変化、完了、reset、module利用状況を確認し、明示承認した現在revisionだけを正式Packageの前提として固定します。AIの自己判断では呼び出せません。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, prototypeRevision: { type: "string", pattern: "^[a-f0-9]{40}$" }, humanApproved: { type: "boolean", const: true } }, required: ["slug", "gameId", "prototypeRevision", "humanApproved"], additionalProperties: false } },
-  { name: "get_game_module_requirements", title: "操作プロトタイプ前の確定module contract取得", description: "game draftのmodule profileを本人がPortalで確定した後、操作プロトタイプ実装前にrevision・digest・SDK version・delivery別利用契約を固定します。AIはprofileを変更できません。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" } }, required: ["slug", "gameId"], additionalProperties: false } },
+  { name: "get_game_module_requirements", title: "操作プロトタイプ前のmodule contract取得", description: "新規draftのsystem-default初期contract、または変更後に本人が確定したcontractから、revision・digest・SDK version・delivery別利用契約を固定します。AIはactive profileを変更できません。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" } }, required: ["slug", "gameId"], additionalProperties: false } },
   { name: "publish_game_package", title: "正式提出データの準備", description: "承認済み操作プロトタイプと同じ共有source・module contract・usage matrixを持つ検査済みpackageを同じ不変revisionとして保存します。このtoolだけでは正式提出になりません。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, moduleBinding: { type: "object" }, moduleUsage: { type: "array", maxItems: 64, items: { type: "object" } }, files: { type: "array", items: { type: "object", properties: { path: { type: "string" }, content: { type: "string" }, encoding: { type: "string", enum: ["utf-8", "base64"] } }, required: ["path", "content", "encoding"], additionalProperties: false }, maxItems: 128 } }, required: ["slug", "gameId", "moduleBinding", "moduleUsage", "files"], additionalProperties: false } },
   { name: "publish_game_source_package", title: "Node不要の正式package検査・保存", description: "承認済み操作プロトタイプと同じ共有source、module contract、usage matrixをPortal側で再検査・bundle・hash固定します。Portal上では制作者コードを実行せず、実行検査は隔離された正式Room Previewで行います。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, manifest: { type: "object" }, moduleBinding: { type: "object" }, moduleUsage: { type: "array", maxItems: 64, items: { type: "object" } }, files: { type: "object", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "manifest", "moduleBinding", "moduleUsage", "files"], additionalProperties: false } },
 ];
@@ -525,6 +527,7 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       playMode: "online-room",
       minimumPlayers,
       maximumPlayers,
+      origin,
     });
     const reviewUrl = `${portalBaseUrl(origin)}${creatorGameModulesPath({
       creatorSlug: slug,
@@ -537,10 +540,12 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       gameId,
       environment: sdkPortalReleaseProfile(origin).environment,
       moduleProfileRevision: draft.moduleProfileRevision,
+      moduleContractDigest: draft.moduleContract.moduleContractDigest,
+      moduleContractState: draft.moduleContractState,
       moduleReviewUrl: reviewUrl,
       editableByAi: false,
-      humanConfirmationRequired: true,
-      instruction: "利用者へmoduleReviewUrl、対象environment、creator、gameを一度に示して停止し、本人がmodule構成を確定した後にget_game_module_requirementsを呼んでください。",
+      humanConfirmationRequired: false,
+      instruction: "system-default由来の初期module contractは人間確認なしで利用できます。get_game_module_requirementsを呼んで操作プロトタイプ制作へ進んでください。module構成を変更する場合だけprepare_module_profile_updateと本人reviewが必要です。",
     });
   }
   if (name === "get_module_update_status") {
@@ -567,22 +572,46 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
     if (binding.payload.clientName !== "ChatGPT Work" && binding.payload.clientName !== "Claude Code") {
       throw new Error("SDK_AUTHORING_CLIENT_UNSUPPORTED");
     }
-    const proposal = await prepareCreatorGameModuleProfileUpdate({
+    const preparation = await prepareCreatorGameModuleProfileUpdate({
       creatorId: creator.id,
       gameId,
       proposerClient: binding.payload.clientName,
       environment: sdkPortalReleaseProfile(origin).environment,
+      origin,
       requestId,
       specification: args.specification,
       moduleDecisions: args.moduleDecisions,
     });
-    if (!proposal) throw new Error("GAME_SDK_PROPOSAL_NOT_FOUND");
+    if (preparation.kind === "unchanged") {
+      const moduleContract = await requireEstablishedCreatorGameModuleContract({
+        creatorId: creator.id,
+        gameId,
+        origin,
+      });
+      return respond({
+        prepared: false,
+        noChange: true,
+        activeProfileChanged: false,
+        moduleContract,
+        humanConfirmationRequired: false,
+        instruction: "canonical profileとdigestが現在の初期contractと同一です。proposal、revision更新、人間確認gateを作らず操作プロトタイプ制作を続けてください。",
+      });
+    }
+    const proposal = preparation.proposal;
     const proposalView = creatorModuleProfileProposalView(proposal);
+    const moduleContractState = creatorGameModuleAuthoringSummary(
+      await getCreatorGameModuleAuthoringState({
+        creatorId: creator.id,
+        gameId,
+      }),
+    );
     return respond({
       prepared: true,
       activeProfileChanged: false,
       proposal: proposalView,
+      moduleContractState,
       reviewUrl: `${origin}/${encodeURIComponent(slug)}/games/${encodeURIComponent(gameId)}/module-proposals/${encodeURIComponent(proposal.id)}`,
+      humanConfirmationRequired: true,
       humanApprovalRequired: proposalView.approvalAllowed,
       instruction: proposalView.approvalAllowed
         ? "PortalのreviewUrlを利用者へ提示し、制作者本人が差分・依存関係・影響・警告を確認して承認するまで、module contract取得やprototype作成へ進まないでください。AIは承認を代行できません。"
@@ -620,7 +649,7 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
         throw new Error("SDK_PROTOTYPE_INPUT_INVALID");
       }
     }
-    const contract = await requireConfirmedCreatorGameModuleContract({
+    const contract = await requireEstablishedCreatorGameModuleContract({
       creatorId: creator.id,
       gameId,
       origin,
@@ -696,7 +725,7 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       throw new Error("SDK_OWNER_REQUIRED");
     }
     const gameId = normalizeRequirementsGameId(args.gameId);
-    const contract = await requireConfirmedCreatorGameModuleContract({
+    const contract = await requireEstablishedCreatorGameModuleContract({
       creatorId: creator.id,
       gameId,
       origin,
@@ -720,7 +749,7 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       : "";
     if (!GAME_PATTERN.test(gameId)) throw new Error("ゲームIDが不正です。");
     const approval = await requireApprovedCreatorMock({ creatorId: creator.id, gameId });
-    const contract = await requireConfirmedCreatorGameModuleContract({
+    const contract = await requireEstablishedCreatorGameModuleContract({
       creatorId: creator.id,
       gameId,
       origin,
@@ -778,7 +807,7 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       throw new Error("GAME_SDK_NODE_FREE_INPUT_INVALID");
     }
     const approval = await requireApprovedCreatorMock({ creatorId: creator.id, gameId });
-    const contract = await requireConfirmedCreatorGameModuleContract({
+    const contract = await requireEstablishedCreatorGameModuleContract({
       creatorId: creator.id,
       gameId,
       origin,

@@ -46,6 +46,15 @@ export const SDK_HELP_ENTRIES: readonly SdkHelpEntry[] = [
     relatedToolNames: ["publish_game_package"],
   },
   {
+    id: "initial-default-module-contract",
+    title: "新規ゲームの初期module contract",
+    question: "新規ゲームではmodule構成を毎回人間が確定する必要がありますか？",
+    answer:
+      "いいえ。create_game_draftは現行デフォルトprofileをsystem-default由来の初期contractとして自動確定し、humanConfirmationRequired=falseを返します。これは人間確認済みとは表示・監査されません。canonical profileと同一な間はget_game_module_requirementsから操作プロトタイプ制作へ進めます。人間またはAIがmodule構成を変更する場合だけproposalを作り、本人の明示承認までactive contractと制作を止めます。",
+    keywords: ["新規ゲーム", "初期", "default", "module", "system-default", "人間確認", "create_game_draft"],
+    relatedToolNames: ["create_game_draft", "get_game_module_requirements", "prepare_module_profile_update"],
+  },
+  {
     id: "module-profile-proposals",
     title: "module構成変更案と本人承認",
     question: "確定済みmodule構成を変更したいとき、AIがそのまま反映できますか？",

@@ -7,7 +7,7 @@
 ```text
 このGame Fields SDKスターターを使ってゲームを1本作りたいです。
 最初にAGENTS.md、APP_REQUIREMENTS.md、MOCK_GUIDE.md、SDK_API.mdを読んでください。
-面白さ・人数・勝敗を自然な対話で決め、詳細案を一度に提示してください。GAME_SPEC.mdの確定後にgame draftを作り、人間がmodule profileを確定するまではUIやAppSetを実装しないでください。
+面白さ・人数・勝敗を自然な対話で決め、詳細案を一度に提示してください。GAME_SPEC.mdの確定後にgame draftを作り、system-default由来の初期module contractなら人間確認を偽装せずそのままUIやAppSetへ進んでください。初期profileを変更する場合だけproposalを作り、本人の明示確定まで実装を停止してください。
 クライアントはGameFieldsRoomのViewだけを描画し、Commandだけを送ってください。ブラウザ内にゲーム状態の正本を作らないでください。
 Word DBとLLMはAppSetのcontext.resourcesからだけ利用してください。
 進行・共通moduleはgame draftで原則必須です。不要な進行部品はAIが削除提案できますが、人間がPortalで確認するまで外しません。共通Word DBは固定標準、LLM・カード・描画は任意利用です。確定revision/digestを取得し、required moduleと実際に使うavailable moduleはdelivery別の公式SDK契約で利用してください。同等機能をゲーム側へ複製しないでください。

@@ -67,8 +67,8 @@ const generated = await requireGameSdkLlmGateway(
 
 ## 実装順
 
-1. `GAME_SPEC.md`を確定し、`create_game_draft`だけを呼ぶ。
-2. Portalのmodule review URLを利用者へ示して停止し、人間の確定後に`get_game_module_requirements`でrevision・digest・SDK versionを固定する。
+1. `GAME_SPEC.md`を確定し、`create_game_draft`を呼ぶ。返された`system-default`由来の初期module contractは人間確認済みと扱わない。
+2. 初期デフォルトのままなら停止せず、`get_game_module_requirements`でrevision・digest・SDK versionを固定する。module構成を変更する場合だけproposalのreview URLを示し、人間の明示確定まで制作を停止する。
 3. required moduleをdelivery別に公式import/API、注入interface、またはPlatform委譲で実利用する。disabled moduleや独自代替実装は使わない。
 4. `manifest.ts`、`preview.json`、`contracts.ts`、`app-set.ts`、`game-client.tsx`を同じゲームIDと共有sourceとして実装する。
 5. `prototype-adapter.ts`は固定fixture、代表scene、resetだけを注入し、正式UI・AppSet・Command型を作り直さない。

@@ -30,6 +30,7 @@ const SAFE_ERROR_PROJECTIONS = new Map<string, [string, SdkToolErrorDetails["lay
   ["MODULE_PROFILE_STALE", ["MODULE_PROFILE_STALE", "validation", "requirements-contract"]],
   ["GAME_SDK_PROPOSAL_NOT_FOUND", ["GAME_SDK_PROPOSAL_NOT_FOUND", "validation", "proposal-contract"]],
   ["GAME_SDK_PROPOSAL_NOOP", ["GAME_SDK_PROPOSAL_NOOP", "validation", "proposal-contract"]],
+  ["GAME_SDK_PROPOSAL_ALREADY_PENDING", ["GAME_SDK_PROPOSAL_ALREADY_PENDING", "validation", "proposal-contract"]],
   ["GAME_SDK_PROPOSAL_DEPENDENCY_CONFLICT", ["GAME_SDK_PROPOSAL_DEPENDENCY_CONFLICT", "validation", "proposal-contract"]],
   ["SDK_INSTANCE_REGISTRY_NOT_CONFIGURED", ["SDK_INSTANCE_REGISTRY_NOT_CONFIGURED", "store", "creator-environment"]],
   ["SDK_INSTANCE_REGISTRY_UNAVAILABLE", ["SDK_INSTANCE_REGISTRY_UNAVAILABLE", "store", "creator-environment"]],

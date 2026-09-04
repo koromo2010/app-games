@@ -252,9 +252,9 @@ const generated = await llm.generate({
 
 ## 共通モジュールprofile
 
-最初のgame draftではPlatformが内部policyとゲーム仕様からmodule profileを保存します。制作者と制作AIは公開されたauthoring contractだけを扱い、非公開moduleを列挙・推測しません。`mock/preview.json`、AppSet、manifestへmodule採否を表す独自キーを書いてはいけません。
+最初のgame draftではPlatformが`createInitialGameSdkModuleProfile()`の現行デフォルトを保存し、`system-default`由来の初期module contractとして自動確定します。これは人間確認済みではなく、人間actorやconfirmation timestampを生成しません。制作者と制作AIは公開されたauthoring contractだけを扱い、非公開moduleを列挙・推測しません。`mock/preview.json`、AppSet、manifestへmodule採否を表す独自キーを書いてはいけません。
 
-制作AIは仕様確定後に`create_game_draft`でmetadataだけを作り、Portalの人間レビューを待ちます。profileの変更・確定は所有者向け管理画面に限定し、選択可能と明示された項目だけを扱います。確定後に`get_game_module_requirements`を呼び、`moduleProfileRevision`・`moduleContractDigest`・SDK version・package向け`requiredModuleIds`・delivery契約を固定してから共有UI/AppSetを実装します。
+制作AIは仕様確定後に`create_game_draft`でmetadataと初期contractを作り、デフォルトのままなら`get_game_module_requirements`を続けて呼びます。canonical profileと同一な再適用はproposal、revision更新、確認gateを作りません。profileを変更する場合は選択可能と明示された項目だけでproposalを作り、所有者向け管理画面で人間が明示承認するまでactive contractを変えず制作を停止します。初期デフォルトまたは人間確定済み変更の`moduleProfileRevision`・`moduleContractDigest`・SDK version・package向け`requiredModuleIds`・delivery契約を固定してから共有UI/AppSetを実装します。
 
 `sdk-resource`は指定された公開package exportとdata/React API、`sdk-helper`は公開helper、`platform-resource`は公開型と注入interface、`platform-owned`はhost委譲を使います。旧`delivery=sdk-package`は期待値が`sdk-helper`または`sdk-resource`の入力行だけで互換受理され、requirements、audit、保存結果ではcanonical deliveryへ正規化されます。required moduleごとにsource path・実API・runtime marker・非再実装証拠を提出し、disabled moduleはimportも利用もしません。操作プロトタイプと正式packageは同じ`game-client.tsx`・AppSet・Command sourceを別adapterへ接続します。
 

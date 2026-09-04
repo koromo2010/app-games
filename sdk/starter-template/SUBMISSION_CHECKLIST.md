@@ -9,7 +9,8 @@
 ## 安全性
 
 - [ ] 共通モジュールは全件必須から開始し、AIがprofileを変更していない
-- [ ] game draft作成後、人間がmodule profileを確定するまでUIやAppSetを実装していない
+- [ ] game draftの初期module contractがsystem-default由来であり、人間確認済みと記録していない
+- [ ] 初期profileを変更した場合だけproposalを作り、人間が明示確定するまでUIやAppSetを実装していない
 - [ ] `get_game_module_requirements`のrevision・digest・SDK versionを固定し、`requiredModuleIds`をdelivery別の公式契約で実利用した
 - [ ] disabled moduleを使わず、required moduleごとのsource・API・runtime evidence・非再実装証拠を記録した
 - [ ] `server-module.ts`はSDK基本セットとアプリセットの合成だけで、Room作成・参加者・設定・revisionを再実装していない

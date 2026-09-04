@@ -75,7 +75,9 @@ test("proposal persistence binds the base revision and digest and approval clear
   assert.match(store, /moduleProfileProposalCompatibility\(proposal\) !== "compatible"/);
   assert.match(store, /mock_approved_revision = NULL/);
   assert.match(store, /prototype_module_contract_digest = NULL/);
-  assert.match(store, /actor_kind, actor_player_id/);
+  assert.match(store, /actor_kind,\s*actor_player_id/);
+  assert.match(store, /moduleProfileProposalActor/);
+  assert.match(store, /proposerClient !== "Portal Owner"/);
 });
 
 test("Portal proposal route is owner-only and requires explicit confirmation", () => {

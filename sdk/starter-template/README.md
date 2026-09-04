@@ -44,6 +44,6 @@ npm run build:game-package
 npm run package
 ```
 
-新規ChatGPT Work / Claude Code制作はOAuth接続済みGame Fields SDK MCPを使います。仕様確定後はgame draftだけを作り、人間によるmodule profile確定後に共有sourceを実装します。`publish_mock`は互換tool名で、module usage検査済みの操作プロトタイプを保存します。人間がその`prototypeRevision`を`approve_mock`で明示承認した後だけ正式packageへ進みます。ローカルNode.jsがない標準経路では`publish_game_source_package`がbundle・hash・package検査を行います。既にNode.jsがある環境では`publish_game_package`も使えます。`publish:*:legacy`は既存管理トークン運用専用です。
+新規ChatGPT Work / Claude Code制作はOAuth接続済みGame Fields SDK MCPを使います。仕様確定後はgame draftを作り、system-default由来の初期module contractなら人間確認を偽装せず共有sourceの実装へ進みます。初期profileを変更する場合だけproposalと本人の明示確定が必要です。`publish_mock`は互換tool名で、module usage検査済みの操作プロトタイプを保存します。人間がその`prototypeRevision`を`approve_mock`で明示承認した後だけ正式packageへ進みます。ローカルNode.jsがない標準経路では`publish_game_source_package`がbundle・hash・package検査を行います。既にNode.jsがある環境では`publish_game_package`も使えます。`publish:*:legacy`は既存管理トークン運用専用です。
 
-共通moduleはPlatform policyとゲーム仕様から構成されます。AIは非公開項目やprofileを変更せず、人間が確定した`moduleProfileRevision`・`moduleContractDigest`・package向け`requiredModuleIds`と各moduleのdelivery契約を使って共有UI/AppSetを実装します。
+共通moduleはPlatform policyとゲーム仕様から構成されます。AIは非公開項目やactive profileを変更せず、初期デフォルトまたは人間が変更確定した`moduleProfileRevision`・`moduleContractDigest`・package向け`requiredModuleIds`と各moduleのdelivery契約を使って共有UI/AppSetを実装します。

@@ -71,7 +71,7 @@ I03 MUST_NOT request, print, persist, commit, or pass through shell arguments an
 I04 MUST use OAuth MCP tools for ChatGPT Work; MUST_NOT invoke either legacy publish script.
 I05 MUST use only C0.starter.repository@C0.starter.ref when starter files are needed; MUST_NOT obtain main, develop, mirrors, or alternate templates.
 I06 MUST mutate files only inside the dedicated C0.starter.directory workspace.
-I07 MUST treat the draft's initial module profile as Game Fields-owned, wait for human confirmation, and then implement exactly the returned requiredModuleIds; MUST_NOT duplicate Platform-owned behavior or use disabled modules.
+I07 MUST treat the draft's system-default initial module contract as Game Fields-owned and immediately usable without claiming human confirmation, then implement exactly the returned requiredModuleIds; any canonical profile change MUST enter the human-confirmation-required proposal flow; MUST_NOT duplicate Platform-owned behavior or use disabled modules.
 I08 MUST keep browser state non-authoritative; Room state, identity, secrets, turn validation, result, and revision remain server-authoritative.
 I09 MUST_NOT access Game Fields DB, Redis, Blob, admin state, authentication Cookie, API keys, Vercel, develop, or main.
 I10 MUST_NOT push or deploy to Game Fields repositories or environments.
@@ -88,7 +88,7 @@ I19A MUST read the public `accountContext` from the accepted handshake or a post
 I19B MUST show the user the actual MCP account context and target creator once before any owner-bound write, then pass that context's `accountRef` as `expectedAccountRef`; a missing, stale, different-account, or different-environment ref MUST fail closed before persistence.
 I19C MUST treat `accountRef` as a comparison value only; MUST NOT request, display, persist, log, decode, or transmit raw player IDs, OAuth grants, tokens, Cookies, or opaque environment bindings.
 I20 MUST_NOT treat MCP Connected, tool discovery, URL issuance, shared Shell rendering, local HTML, or package candidate save as completion.
-I21 MUST resolve and freeze the human-confirmed module contract before prototype implementation, then require explicit human approval of the exact published prototypeRevision before formal packaging; AI self-approval is forbidden.
+I21 MUST resolve and freeze either the system-default initial module contract or a human-confirmed changed contract before prototype implementation, then require explicit human approval of the exact published prototypeRevision before formal packaging; AI self-approval is forbidden.
 I22 MUST use publish_mock and publish_game_source_package as the server-side Node-free path when local Node.js is unavailable; MUST_NOT ask a general creator to install Node.js, npm, Git, or Vercel CLI as the default path.
 I23 MUST use prepare_module_profile_update only for module IDs explicitly returned as creator-configurable by the current authoring surface; MUST read a compatible proposal back with get_game_module_profile_proposal in the same tool flow before stopping; MUST_NOT infer or submit hidden Platform modules, treat a proposal as active profile mutation, or continue past an incompatible legacy proposal.
 I24 MUST parse MCP CallToolResult by checking isError first and then using structuredContent; only when structuredContent is absent MAY parse one JSON text content item once; canonical paths are structuredContent.environmentBinding and structuredContent.proposal.id; MUST_NOT search guessed aliases.
@@ -399,7 +399,7 @@ WRITE completed GAME_SPEC.md.
 GOTO S4A.
 ```
 
-## S4A::GAME_DRAFT_AND_HUMAN_MODULE_CONFIRMATION
+## S4A::GAME_DRAFT_AND_INITIAL_MODULE_CONTRACT
 
 ```text
 CALL create_game_draft WITH {
@@ -416,11 +416,15 @@ ASSERT created == true.
 ASSERT prototypeSaved == false.
 ASSERT packageSaved == false.
 ASSERT moduleReviewUrl is URL.
+ASSERT humanConfirmationRequired == false.
+ASSERT moduleContractState.establishmentKind == "initial-default".
+ASSERT moduleContractState.origin == "system-default".
+ASSERT moduleContractState.moduleProfileConfirmedAt == null.
+ASSERT moduleContractState.auditRecord.event == "initial-default-established".
+ASSERT moduleContractState.auditRecord.actorKind == "system".
 
-EMIT target environment, creator URL, gameId, moduleReviewUrl, and:
-  "操作プロトタイプを作る前に、Game Fields機能の構成を確認して確定してください。確定後、このチャットへ戻って『確定しました』と伝えてください。"
-WAIT human module confirmation.
-MUST_NOT implement game HTML, React client, AppSet, prototype adapter, or formal adapter before confirmation.
+EMIT target environment, creator URL, gameId, the system-default origin, and moduleReviewUrl as an optional configuration link.
+MUST_NOT describe the initial contract as humanConfirmed, userApproved, confirmedByUser, 人間確認済み, or 利用者承認済み.
 
 CALL get_game_module_requirements(selected.slug, gameId).
 ASSERT response.editableByAi == false.
@@ -428,8 +432,10 @@ ASSERT response.moduleProfileRevision exists.
 ASSERT sha256(response.moduleContractDigest).
 ASSERT response.sdkPackage.version == C0.release.sdkPackage.
 ASSERT every response.requiredModuleIds item has requiredModules contract data.
+ASSERT response.moduleContractState.establishmentKind == "initial-default".
+ASSERT response.moduleContractState.humanConfirmationRequired == false.
 
-IF a confirmed module composition needs to change:
+IF the initial-default or a human-confirmed module composition needs to change:
   ASSERT every requested module decision is present in the current creator-configurable authoring profile.
   MUST_NOT guess, enumerate, or submit Platform/internal module IDs.
   FREEZE MODULE_PROPOSAL_REQUEST_ID := stable requestId.
@@ -447,7 +453,15 @@ IF a confirmed module composition needs to change:
     and retry once with the same MODULE_PROPOSAL_REQUEST_ID when the invocation limit permits.
   IF MCP_RESULT.isError == true after recovery:
     EMIT the sanitized classified error and HALT without a new requestId or second logical proposal.
-  SET PREPARED_PROPOSAL := parsed payload.
+  SET PREPARED_RESULT := parsed payload.
+  IF PREPARED_RESULT.noChange == true:
+    ASSERT PREPARED_RESULT.prepared == false.
+    ASSERT PREPARED_RESULT.activeProfileChanged == false.
+    ASSERT PREPARED_RESULT.humanConfirmationRequired == false.
+    ASSERT PREPARED_RESULT.proposal is absent.
+    SET response := PREPARED_RESULT.moduleContract.
+    GOTO S4A_FREEZE without revision/digest update or human review.
+  SET PREPARED_PROPOSAL := PREPARED_RESULT.
   ASSERT isNonEmpty(PREPARED_PROPOSAL.proposal.id).
   CALL get_game_module_profile_proposal WITH {
     slug: selected.slug,
@@ -468,6 +482,7 @@ IF a confirmed module composition needs to change:
   EMIT PROPOSAL_READBACK exact diff, dependencies, impact, warnings, base identity, audit, and reviewUrl.
   MUST_NOT call any tool that assumes the proposed profile is active until the owner approves the proposal.
   HALT for the creator's Portal review.
+S4A_FREEZE:
 FREEZE MODULE_CONTRACT := {
   environment,
   moduleProfileRevision,
@@ -476,7 +491,8 @@ FREEZE MODULE_CONTRACT := {
   sdkContractVersion,
   requiredModuleIds,
   disabledModuleIds,
-  requiredModules
+  requiredModules,
+  moduleContractState
 }.
 GOTO S5.
 ```

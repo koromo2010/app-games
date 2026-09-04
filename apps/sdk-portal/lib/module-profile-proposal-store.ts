@@ -12,7 +12,10 @@ import {
 } from "@game-fields/game-sdk/modules";
 import { ensureSdkSchema, sdkSql } from "./sdk-postgres.ts";
 import { createGameSdkModuleContract } from "./module-authoring-contract.ts";
-import { getCreatorGameModuleAuthoringState } from "./module-authoring-store.ts";
+import {
+  establishedCreatorGameModuleContract,
+  getCreatorGameModuleAuthoringState,
+} from "./module-authoring-store.ts";
 
 export type ModuleProfileProposalDiff = {
   id: GameSdkModuleId;
@@ -25,7 +28,7 @@ export type ModuleProfileProposal = {
   id: string;
   creatorId: string;
   gameId: string;
-  proposerClient: string;
+  proposerClient: "ChatGPT Work" | "Claude Code" | "Portal Owner";
   environment: "development" | "production";
   requestId: string;
   baseModuleProfileRevision: string;
@@ -308,6 +311,49 @@ export function impactReport(diff: ModuleProfileProposalDiff[], profile: GameSdk
   ];
 }
 
+export function resolveModuleProfileChange(
+  currentProfile: GameSdkModuleProfile,
+  moduleDecisions: unknown,
+) {
+  if (!moduleDecisions || typeof moduleDecisions !== "object" || Array.isArray(moduleDecisions)) {
+    throw new Error("GAME_SDK_PROPOSAL_DECISIONS_REQUIRED");
+  }
+  const proposedProfile = updateGameSdkModuleProfile(currentProfile, moduleDecisions);
+  const diff = profileDiff(currentProfile, proposedProfile);
+  if (diff.length === 0) {
+    return {
+      kind: "unchanged" as const,
+      proposedProfile,
+      diff,
+      dependencies: [] as string[],
+      impact: [] as string[],
+      warnings: [] as string[],
+    };
+  }
+  const report = dependencyReport(proposedProfile, diff);
+  if (report.dependencies.length) throw new Error("GAME_SDK_PROPOSAL_DEPENDENCY_CONFLICT");
+  return {
+    kind: "changed" as const,
+    proposedProfile,
+    diff,
+    dependencies: report.dependencies,
+    impact: impactReport(diff, proposedProfile),
+    warnings: report.warnings,
+  };
+}
+
+export function moduleProfileProposalActor(input: {
+  proposerClient: ModuleProfileProposal["proposerClient"];
+  proposerPlayerId?: string;
+}) {
+  if (input.proposerClient !== "Portal Owner") {
+    return { actorKind: "ai" as const, actorPlayerId: null };
+  }
+  const actorPlayerId = input.proposerPlayerId?.trim() || null;
+  if (!actorPlayerId) throw new Error("GAME_SDK_PROPOSAL_OWNER_REQUIRED");
+  return { actorKind: "owner" as const, actorPlayerId };
+}
+
 export type ModuleProfileProposalLookupInput = {
   creatorId: string;
   gameId: string;
@@ -351,8 +397,10 @@ export async function resolveExistingModuleProfileProposal(input: {
 export async function prepareCreatorGameModuleProfileUpdate(input: {
   creatorId: string;
   gameId: string;
-  proposerClient: "ChatGPT Work" | "Claude Code";
+  proposerClient: "ChatGPT Work" | "Claude Code" | "Portal Owner";
+  proposerPlayerId?: string;
   environment: "development" | "production";
+  origin?: string;
   requestId: string;
   specification: unknown;
   moduleDecisions: unknown;
@@ -370,27 +418,38 @@ export async function prepareCreatorGameModuleProfileUpdate(input: {
       proposalId,
     }),
   });
-  if (existing) return existing;
+  if (existing) return { kind: "proposal" as const, proposal: existing };
   const current = await proposalStoreBoundary(input.requestId, "authoring-state", () => getCreatorGameModuleAuthoringState({
     creatorId: input.creatorId,
     gameId: input.gameId,
   }));
   if (!current) throw new Error("GAME_SDK_DRAFT_NOT_FOUND");
-  if (!current.moduleProfileConfirmedAt || !current.moduleContractDigest) {
+  if (!current.moduleContractDigest) {
     throw new Error("MODULE_PROFILE_NOT_CONFIRMED");
   }
-  const specification = validateSpecification(input.specification);
-  if (!input.moduleDecisions || typeof input.moduleDecisions !== "object" || Array.isArray(input.moduleDecisions)) {
-    throw new Error("GAME_SDK_PROPOSAL_DECISIONS_REQUIRED");
+  if (current.pendingModuleProfileProposalId) {
+    throw new Error("GAME_SDK_PROPOSAL_ALREADY_PENDING");
   }
-  const proposedProfile = updateGameSdkModuleProfile(current.moduleProfile, input.moduleDecisions);
-  const diff = profileDiff(current.moduleProfile, proposedProfile);
-  if (diff.length === 0) throw new Error("GAME_SDK_PROPOSAL_NOOP");
-  const dependencyReportResult = dependencyReport(proposedProfile, diff);
-  if (dependencyReportResult.dependencies.length) throw new Error("GAME_SDK_PROPOSAL_DEPENDENCY_CONFLICT");
+  const establishedContract = establishedCreatorGameModuleContract(current, {
+    origin: input.origin,
+  });
+  if (establishedContract.environment !== input.environment) {
+    throw new Error("AUTHORING_ENVIRONMENT_BINDING_MISMATCH");
+  }
+  const specification = input.proposerClient === "Portal Owner"
+    ? { title: "Portal module settings", coreLoop: "Owner-initiated module contract change." }
+    : validateSpecification(input.specification);
+  const change = resolveModuleProfileChange(current.moduleProfile, input.moduleDecisions);
+  if (change.kind === "unchanged") {
+    return {
+      kind: "unchanged" as const,
+      moduleProfileRevision: current.moduleProfileRevision,
+      moduleContractDigest: establishedContract.moduleContractDigest,
+    };
+  }
   const catalogDigest = moduleCatalogDigest();
   const id = randomUUID();
-  const impact = impactReport(diff, proposedProfile);
+  const proposerActor = moduleProfileProposalActor(input);
   const rows = await proposalStoreBoundary(input.requestId, "proposal-insert", async () => sdkSql()`
       INSERT INTO sdk_game_module_profile_proposals (
         id, creator_id, game_row_id, game_id, proposer_client, environment,
@@ -401,34 +460,37 @@ export async function prepareCreatorGameModuleProfileUpdate(input: {
       SELECT ${id}::uuid, c.id, g.id, g.game_id, ${input.proposerClient}, ${input.environment},
              ${input.requestId}::uuid, g.module_profile_revision, g.module_contract_digest,
              ${catalogDigest}, ${JSON.stringify(specification)}::jsonb,
-             ${JSON.stringify(proposedProfile)}::jsonb, ${JSON.stringify(diff)}::jsonb,
-             ${JSON.stringify(dependencyReportResult.dependencies)}::jsonb,
-             ${JSON.stringify(impact)}::jsonb, ${JSON.stringify(dependencyReportResult.warnings)}::jsonb
+             ${JSON.stringify(change.proposedProfile)}::jsonb, ${JSON.stringify(change.diff)}::jsonb,
+             ${JSON.stringify(change.dependencies)}::jsonb,
+             ${JSON.stringify(change.impact)}::jsonb, ${JSON.stringify(change.warnings)}::jsonb
       FROM sdk_games g
       JOIN sdk_creators c ON c.id = g.creator_id
       WHERE c.id = ${input.creatorId}::uuid
         AND g.game_id = ${input.gameId}
         AND g.deleted_at IS NULL
-        AND g.module_profile_confirmed_at IS NOT NULL
-        AND g.module_contract_digest = ${current.moduleContractDigest}
+        AND g.module_contract_digest = ${establishedContract.moduleContractDigest}
       RETURNING id
     `);
   if (!Array.isArray(rows) || rows.length === 0) throw new Error("MODULE_PROFILE_STALE");
   await proposalStoreBoundary(input.requestId, "audit-insert", async () => sdkSql()`
       INSERT INTO sdk_game_module_profile_audit (
-        proposal_id, creator_id, game_row_id, action, actor_kind, actor_client,
+        proposal_id, creator_id, game_row_id, action, actor_kind,
+        actor_player_id, actor_client,
         base_module_profile_revision, base_module_contract_digest, diff
       )
-      SELECT p.id, p.creator_id, p.game_row_id, 'prepared', 'ai', p.proposer_client,
+      SELECT p.id, p.creator_id, p.game_row_id, 'prepared', ${proposerActor.actorKind},
+             ${proposerActor.actorPlayerId}, p.proposer_client,
              p.base_module_profile_revision, p.base_module_contract_digest, p.diff
       FROM sdk_game_module_profile_proposals p
       WHERE p.id = ${id}::uuid
     `);
-  return getCreatorGameModuleProfileProposal({
+  const proposal = await getCreatorGameModuleProfileProposal({
     creatorId: input.creatorId,
     gameId: input.gameId,
     proposalId: id,
   });
+  if (!proposal) throw new Error("GAME_SDK_PROPOSAL_NOT_FOUND");
+  return { kind: "proposal" as const, proposal };
 }
 
 export async function getCreatorGameModuleProfileProposal(input: {
@@ -540,20 +602,16 @@ export async function updateCreatorGameModuleProfileProposal(input: {
   if (!current || current.moduleProfileRevision !== proposal.baseModuleProfileRevision || current.moduleContractDigest !== proposal.baseModuleContractDigest) {
     throw new Error("MODULE_PROFILE_STALE");
   }
-  const proposedProfile = updateGameSdkModuleProfile(current.moduleProfile, input.moduleDecisions);
-  const diff = profileDiff(current.moduleProfile, proposedProfile);
-  if (!diff.length) throw new Error("GAME_SDK_PROPOSAL_NOOP");
-  const dependencyReportResult = dependencyReport(proposedProfile, diff);
-  if (dependencyReportResult.dependencies.length) throw new Error("GAME_SDK_PROPOSAL_DEPENDENCY_CONFLICT");
-  const impact = impactReport(diff, proposedProfile);
+  const change = resolveModuleProfileChange(current.moduleProfile, input.moduleDecisions);
+  if (change.kind === "unchanged") throw new Error("GAME_SDK_PROPOSAL_NOOP");
   await ensureSdkSchema();
   const rows = await sdkSql()`
     UPDATE sdk_game_module_profile_proposals
-    SET proposed_profile = ${JSON.stringify(proposedProfile)}::jsonb,
-        diff = ${JSON.stringify(diff)}::jsonb,
-        dependencies = ${JSON.stringify(dependencyReportResult.dependencies)}::jsonb,
-        impact = ${JSON.stringify(impact)}::jsonb,
-        warnings = ${JSON.stringify(dependencyReportResult.warnings)}::jsonb,
+    SET proposed_profile = ${JSON.stringify(change.proposedProfile)}::jsonb,
+        diff = ${JSON.stringify(change.diff)}::jsonb,
+        dependencies = ${JSON.stringify(change.dependencies)}::jsonb,
+        impact = ${JSON.stringify(change.impact)}::jsonb,
+        warnings = ${JSON.stringify(change.warnings)}::jsonb,
         updated_at = NOW()
     WHERE id = ${input.proposalId}::uuid
       AND creator_id = ${input.creatorId}::uuid

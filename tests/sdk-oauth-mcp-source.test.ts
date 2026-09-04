@@ -97,7 +97,7 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mockPipeline, /parseManifest\(input\.gameId, prototypeFiles\)/);
   assert.match(mockPipeline, /SDK_PROTOTYPE_GIT_WRITE_FAILED/);
   assert.match(mockPipeline, /revision,/);
-  assert.match(mcp, /requireConfirmedCreatorGameModuleContract/);
+  assert.match(mcp, /requireEstablishedCreatorGameModuleContract/);
   assert.match(mcp, /validateGameSdkModuleUsage/);
   assert.match(mockPipeline, /prototype_source_sha256/);
   assert.match(mcp, /creatorUrl,/);

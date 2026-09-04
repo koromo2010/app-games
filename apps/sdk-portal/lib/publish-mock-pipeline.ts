@@ -128,15 +128,21 @@ async function findExistingRevision(
            prototype_source_sha256 AS "sharedSourceSha256",
            title,
            description
-    FROM sdk_games
-    WHERE creator_id = ${input.creatorId}
-      AND game_id = ${input.gameId}
-      AND module_profile_revision = ${input.contract.moduleProfileRevision}::uuid
-      AND module_contract_digest = ${input.contract.moduleContractDigest}
-      AND prototype_source_sha256 = ${sourceSha256}
-      AND mock_revision IS NOT NULL
-      AND module_profile_confirmed_at IS NOT NULL
-      AND deleted_at IS NULL
+    FROM sdk_games g
+    WHERE g.creator_id = ${input.creatorId}
+      AND g.game_id = ${input.gameId}
+      AND g.module_profile_revision = ${input.contract.moduleProfileRevision}::uuid
+      AND g.module_contract_digest = ${input.contract.moduleContractDigest}
+      AND g.prototype_source_sha256 = ${sourceSha256}
+      AND g.mock_revision IS NOT NULL
+      AND g.module_contract_digest IS NOT NULL
+      AND g.deleted_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM sdk_game_module_profile_proposals p
+        WHERE p.game_row_id = g.id
+          AND p.status = 'pending'
+      )
     LIMIT 1
   `;
   const row = (Array.isArray(rows) ? rows[0] : null) as {
@@ -304,7 +310,7 @@ export async function publishMockPipeline(
     try {
       const manifestJson = JSON.stringify(manifest);
       const savedRows = await database`
-        UPDATE sdk_games
+        UPDATE sdk_games g
         SET title = ${input.title}, description = ${input.description},
             manifest = ${manifestJson}::jsonb, mock_revision = ${revision},
             prototype_module_profile_revision = ${input.contract.moduleProfileRevision},
@@ -313,18 +319,24 @@ export async function publishMockPipeline(
             prototype_source_sha256 = ${sourceSha256},
             mock_approved_revision = NULL, mock_approved_at = NULL,
             mock_approved_by_player_id = NULL, updated_at = NOW()
-        WHERE creator_id = ${input.creatorId}
-          AND game_id = ${input.gameId}
-          AND module_profile_revision = ${input.contract.moduleProfileRevision}
-          AND module_contract_digest = ${input.contract.moduleContractDigest}
-          AND module_profile_confirmed_at IS NOT NULL
-          AND deleted_at IS NULL
+        WHERE g.creator_id = ${input.creatorId}
+          AND g.game_id = ${input.gameId}
+          AND g.module_profile_revision = ${input.contract.moduleProfileRevision}
+          AND g.module_contract_digest = ${input.contract.moduleContractDigest}
+          AND g.module_contract_digest IS NOT NULL
+          AND g.deleted_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM sdk_game_module_profile_proposals p
+            WHERE p.game_row_id = g.id
+              AND p.status = 'pending'
+          )
         RETURNING id
       `;
       if (!Array.isArray(savedRows) || savedRows.length === 0) {
         throw pipelineError({
           code: "MODULE_PROFILE_STALE",
-          message: "confirmed module profile is stale.",
+          message: "established module contract is stale.",
           layer: "validation",
           operation: "mock-revision-update",
           revision,

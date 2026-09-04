@@ -42,7 +42,8 @@ test("system map preserves environment and source-of-truth boundaries", () => {
   assert.match(map, /`VERCEL_GIT_COMMIT_REF`/);
   assert.match(map, /現在のDeployment状態.*複製しない/);
   assert.match(map, /環境や対象commitは作業開始時にlive read-back/);
-  assert.match(map, /AIはmodule profileの提案を準備できるが、active profileを直接変更しない/);
+  assert.match(map, /canonical defaultはsystem-default由来の初期contractとして成立し、人間確認済みとは記録しない/);
+  assert.match(map, /AIまたは制作者が変更proposalを準備してもactive profileを直接変更せず/);
   assert.match(map, /develop -> main.*SDK Packageの環境間promotionは別操作/);
   assert.match(map, /文書だけ.*全surfaceをbuild skip/);
   assert.match(map, /添付ファイル名、引用文書、保存済み作業指示の本文だけを、作業スレから監督スレへの切替指示と解釈しない/);

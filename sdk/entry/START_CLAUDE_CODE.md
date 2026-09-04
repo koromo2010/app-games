@@ -22,9 +22,12 @@ The common workflow and invariants are authoritative from
 Code connection, environment binding, workspace, and Node-free routing.
 
 Do not implement prototype HTML, React UI, AppSet, or adapters before
-`create_game_draft`, human module review/confirmation, and
-`get_game_module_requirements` return a fixed profile revision, contract digest,
-and SDK version. Honor each module's delivery contract. Use official SDK
+`create_game_draft` and `get_game_module_requirements` return a fixed profile
+revision, contract digest, SDK version, and an `initial-default` or
+`human-confirmation` establishment kind. A new draft's system-default initial
+contract does not require or claim human confirmation. If its canonical profile
+changes, wait for human proposal review/confirmation before continuing. Honor
+each module's delivery contract. Use official SDK
 resources/helpers, injected platform-resource fixtures, and platform-owned host
 delegation; never build bespoke substitutes or fictitious platform imports.
 
@@ -150,7 +153,7 @@ fixed target.
 ## Claude Code execution profile
 
 - Work only in the dedicated empty game folder.
-- Create the specification first, then game draft. Stop for human module review before source implementation.
+- Create the specification first, then game draft. Continue from the system-default initial contract without calling it human-confirmed. Stop for human review only when a module change proposal exists.
 - Freeze moduleProfileRevision, moduleContractDigest, SDK version, required/disabled lists and delivery contracts.
 - Build `source/game-client.tsx`, AppSet/Command source and module components once. Use a prototype fixture adapter and formal Room adapter around that same source.
 - Keep Platform room/lobby/settings/player/debug Shell out of the game-specific UI.
@@ -162,7 +165,7 @@ fixed target.
 - Show the returned game URL and checklist, wait for explicit human approval,
   then call `approve_mock` for that exact `prototypeRevision`. AI self-approval is
   forbidden.
-- Call `get_game_module_requirements` before prototype implementation, after human module confirmation. Only after module usage validation and prototype approval may formal packaging start.
+- Call `get_game_module_requirements` before prototype implementation. It may return the new draft's system-default initial contract or a human-confirmed changed contract. Only after module usage validation and prototype approval may formal packaging start.
 - If Node.js already exists, local checks are optional extra evidence. Never
   block the standard path on them or ask the user to install Node.js.
 - Use `publish_game_source_package` with the prototype files, manifest,

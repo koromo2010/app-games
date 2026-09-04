@@ -102,6 +102,12 @@ export async function saveCreatorGamePackage(input: {
     JOIN sdk_games g ON g.id = r.game_id
     WHERE g.creator_id = ${input.creatorId}
       AND g.game_id = ${input.gameId}
+      AND NOT EXISTS (
+        SELECT 1
+        FROM sdk_game_module_profile_proposals p
+        WHERE p.game_row_id = g.id
+          AND p.status = 'pending'
+      )
       AND r.package_root_sha256 = ${parsed.packageRootSha256}
       AND r.module_profile_revision = ${input.authoringBinding.moduleProfileRevision}::uuid
       AND r.module_contract_digest = ${input.authoringBinding.moduleContractDigest}
@@ -140,6 +146,12 @@ export async function saveCreatorGamePackage(input: {
     LEFT JOIN sdk_game_package_revisions r ON r.game_id = g.id
     WHERE g.creator_id = ${input.creatorId}
       AND g.game_id = ${input.gameId}
+      AND NOT EXISTS (
+        SELECT 1
+        FROM sdk_game_module_profile_proposals p
+        WHERE p.game_row_id = g.id
+          AND p.status = 'pending'
+      )
     GROUP BY g.id
   `;
   if (!Array.isArray(revisionCountRows) || revisionCountRows.length === 0) {
@@ -177,12 +189,18 @@ export async function saveCreatorGamePackage(input: {
            ${input.authoringBinding.moduleContractDigest},
            ${input.authoringBinding.prototypeRevision},
            ${input.authoringBinding.sharedSourceSha256}
-    FROM sdk_games
-    WHERE creator_id = ${input.creatorId} AND game_id = ${input.gameId}
-      AND module_profile_revision = ${input.authoringBinding.moduleProfileRevision}::uuid
-      AND module_contract_digest = ${input.authoringBinding.moduleContractDigest}
-      AND mock_approved_revision = ${input.authoringBinding.prototypeRevision}
-      AND prototype_source_sha256 = ${input.authoringBinding.sharedSourceSha256}
+    FROM sdk_games g
+    WHERE g.creator_id = ${input.creatorId} AND g.game_id = ${input.gameId}
+      AND g.module_profile_revision = ${input.authoringBinding.moduleProfileRevision}::uuid
+      AND g.module_contract_digest = ${input.authoringBinding.moduleContractDigest}
+      AND g.mock_approved_revision = ${input.authoringBinding.prototypeRevision}
+      AND g.prototype_source_sha256 = ${input.authoringBinding.sharedSourceSha256}
+      AND NOT EXISTS (
+        SELECT 1
+        FROM sdk_game_module_profile_proposals p
+        WHERE p.game_row_id = g.id
+          AND p.status = 'pending'
+      )
     ON CONFLICT (game_id, package_root_sha256) DO NOTHING
     RETURNING revision
   `;

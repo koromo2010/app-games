@@ -78,17 +78,19 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  Connect["接続 / OAuth / handshake"] --> Draft["draft・mockを作成"]
-  Draft --> Proposal["module profileを提案"]
+  Connect["接続 / OAuth / handshake"] --> Draft["draft・初期default contract"]
+  Draft --> Prototype["操作プロトタイプ"]
+  Draft --> Proposal["module変更proposal"]
   Proposal --> Approval["Portal ownerが承認"]
-  Approval --> Package["immutable Packageを確定"]
+  Approval --> Prototype
+  Prototype --> Package["immutable Packageを確定"]
   Package --> Preview["正式RoomでPreview"]
   Preview --> Adoption["対象環境のcatalogへ採用"]
   Adoption --> Runtime["Platformの正式Runtimeで実行"]
 ```
 
 - MCP initialize、OAuth、SDK handshakeは別の責務である。handshake契約は[`SDK_HANDSHAKE.md`](./SDK_HANDSHAKE.md)を使う。
-- AIはmodule profileの提案を準備できるが、active profileを直接変更しない。承認はPortal ownerが行う。
+- 新規draftのcanonical defaultはsystem-default由来の初期contractとして成立し、人間確認済みとは記録しない。AIまたは制作者が変更proposalを準備してもactive profileを直接変更せず、承認はPortal ownerが行う。
 - Previewの成功を正式採用と同一視しない。Platformは承認済みserver registryと固定Package revisionを使う。
 - development catalogからproduction catalogへの昇格は、単なるbranch mergeではなく、検証済みimmutable Packageの移送である。
 - `develop -> main`のplatform code昇格と、SDK Packageの環境間promotionは別操作として扱う。
