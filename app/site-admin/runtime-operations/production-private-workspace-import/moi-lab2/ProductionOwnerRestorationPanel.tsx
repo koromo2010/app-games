@@ -70,7 +70,7 @@ function parsePlan(value: unknown, account: AccountProjection | null): OwnerBind
     || v.username !== "moi" || typeof v.accountFingerprint !== "string" || !fingerprintPattern.test(v.accountFingerprint)
     || (v.environment === "production" && v.accountFingerprint !== fixedProductionAccountFingerprint)
     || (account && v.accountFingerprint !== account.fingerprint)
-    || wi.operationId !== "06eb6940-f624-59b0-8d00-47eba9a9cec8"
+    || wi.operationId !== "06eb6940-fd24-59b0-8d00-47eba9a9ce8c"
     || typeof wi.bundleSha256 !== "string" || !sha256Pattern.test(wi.bundleSha256)
     || typeof wi.workspaceManifestSha256 !== "string" || !sha256Pattern.test(wi.workspaceManifestSha256)
     || typeof wi.perGameLedgerSha256 !== "string" || !sha256Pattern.test(wi.perGameLedgerSha256)

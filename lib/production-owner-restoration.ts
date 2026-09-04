@@ -4,7 +4,7 @@ import { operatorOwnerFingerprint } from "../apps/sdk-portal/lib/creator-ownersh
 export const productionOwnerRestorationTarget = "moi-lab2" as const;
 export const productionOwnerRestorationUsername = "moi" as const;
 export const productionOwnerRestorationWorkspaceOperationId =
-  "06eb6940-f624-59b0-8d00-47eba9a9cec8" as const;
+  "06eb6940-fd24-59b0-8d00-47eba9a9ce8c" as const;
 export const productionOwnerRestorationFixedProductionAccountFingerprint =
   "opf_v1_QTP2zsdJ7Z6c6vgDTPI03XbqOJgsiJfzrGrs2D6L-nM" as const;
 

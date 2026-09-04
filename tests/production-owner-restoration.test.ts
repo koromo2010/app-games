@@ -171,12 +171,17 @@ test("routes and UI are GET-only, exact-target, no-store, and contain no binding
 });
 
 test("owner restoration locks the completed A5 workspace operation, not the pre-import A3 recovery identity", () => {
-  assert.equal(productionOwnerRestorationWorkspaceOperationId, "06eb6940-f624-59b0-8d00-47eba9a9cec8");
+  assert.equal(productionOwnerRestorationWorkspaceOperationId, "06eb6940-fd24-59b0-8d00-47eba9a9ce8c");
+  assert.notEqual(productionOwnerRestorationWorkspaceOperationId, "06eb6940-f624-59b0-8d00-47eba9a9cec8");
   assert.notEqual(productionOwnerRestorationWorkspaceOperationId, productionPrivateWorkspaceImportRecoveryIdentity.operationId);
+  assert.equal(resolveProductionOwnerRestorationWorkspaceCandidates([
+    completedImport({ operationId: "06eb6940-f624-59b0-8d00-47eba9a9cec8" }),
+  ]), null);
   const store = readFileSync("apps/sdk-portal/lib/production-owner-restoration-store.ts", "utf8");
   const panel = readFileSync("app/site-admin/runtime-operations/production-private-workspace-import/moi-lab2/ProductionOwnerRestorationPanel.tsx", "utf8");
   assert.match(store, /productionOwnerRestorationWorkspaceOperationId/);
-  assert.match(panel, /06eb6940-f624-59b0-8d00-47eba9a9cec8/);
+  assert.match(panel, /06eb6940-fd24-59b0-8d00-47eba9a9ce8c/);
+  assert.doesNotMatch(store + panel, /06eb6940-f624-59b0-8d00-47eba9a9cec8/);
   assert.doesNotMatch(store + panel, /fa5eca14-a961-4bd1-9e68-78a609895971/);
 });
 
