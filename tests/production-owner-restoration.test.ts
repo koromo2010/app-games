@@ -15,7 +15,9 @@ import {
 } from "../apps/sdk-portal/lib/production-owner-restoration-store.ts";
 import type { CompletedProductionPrivateWorkspaceImport } from "../apps/sdk-portal/lib/production-private-workspace-import.ts";
 import {
+  diagnoseCompletedProductionPrivateWorkspaceImport,
   projectCompletedProductionPrivateWorkspaceImportDiagnostic,
+  setCompletedProductionPrivateWorkspaceImportDiagnosticContextForTest,
 } from "../apps/sdk-portal/lib/production-private-workspace-import-store.ts";
 import {
   ProductionOwnerRestorationDiagnosticError,
@@ -129,6 +131,40 @@ function completedImportDiagnostic(overrides: Record<string, unknown> = {}, tabl
   });
 }
 
+function diagnosticContext(responses: Array<unknown>) {
+  return {
+    selectedKey: "SDK_DATABASE_URL" as const,
+    fallbackUsed: false,
+    databaseTargetFingerprint: "t".repeat(64),
+    databaseNameFingerprint: "n".repeat(64),
+    sql: {
+      async query() {
+        const response = responses.shift();
+        if (response && typeof response === "object" && "error" in response) throw (response as { error: unknown }).error;
+        return response;
+      },
+    },
+  };
+}
+
+const allPrivateImportObjects = [[{
+  objects: [
+    "sdk_production_private_workspace_import_operations",
+    "sdk_production_private_workspaces",
+    "sdk_production_private_workspace_games",
+    "sdk_production_private_workspace_files",
+  ],
+}]];
+
+async function withDiagnosticContext<T>(responses: Array<unknown>, work: () => Promise<T>) {
+  setCompletedProductionPrivateWorkspaceImportDiagnosticContextForTest(diagnosticContext(responses));
+  try {
+    return await work();
+  } finally {
+    setCompletedProductionPrivateWorkspaceImportDiagnosticContextForTest(null);
+  }
+}
+
 test("completed-import diagnostic accepts only the complete canonical A5 contract", () => {
   const diagnostic = completedImportDiagnostic();
   assert.equal(diagnostic.canonicalReader.matched, true);
@@ -205,8 +241,8 @@ test("completed-import diagnostic classifies infrastructure failures without pro
     "OWNER_RESTORATION_DIAGNOSTIC_MODULE_UNAVAILABLE",
   );
   const cases: Array<[string, unknown]> = [
-    ["OWNER_RESTORATION_DIAGNOSTIC_REQUIRED_SCHEMA_UNAVAILABLE", { code: "42P01", message: "raw table secret" }],
-    ["OWNER_RESTORATION_DIAGNOSTIC_REQUIRED_SCHEMA_UNAVAILABLE", { code: "42703", message: "raw column secret" }],
+    ["OWNER_RESTORATION_DIAGNOSTIC_REQUIRED_TABLE_UNAVAILABLE", { code: "42P01", message: "raw table secret" }],
+    ["OWNER_RESTORATION_DIAGNOSTIC_REQUIRED_COLUMN_UNAVAILABLE", { code: "42703", message: "raw column secret" }],
     ["OWNER_RESTORATION_DIAGNOSTIC_QUERY_TIMEOUT", { code: "57014", message: "timeout host" }],
     ["OWNER_RESTORATION_DIAGNOSTIC_QUERY_TIMEOUT", { code: "ETIMEDOUT", message: "timeout host" }],
     ["OWNER_RESTORATION_DIAGNOSTIC_QUERY_PERMISSION_DENIED", { code: "42501", message: "permission player" }],
@@ -214,7 +250,60 @@ test("completed-import diagnostic classifies infrastructure failures without pro
   ];
   for (const [expected, error] of cases) assert.equal(diagnosticQueryFailureCode(error), expected);
   assert.equal(diagnosticFailureCode(new Error("credential token host")), "OWNER_RESTORATION_DIAGNOSTIC_MODULE_UNAVAILABLE");
-  assert.equal(productionOwnerRestorationDiagnosticFailureCodes.length, 10);
+  assert.equal(productionOwnerRestorationDiagnosticFailureCodes.length, 13);
+});
+
+test("completed-import diagnosis remains canonical when metadata permission is unavailable", async () => {
+  const diagnostic = await withDiagnosticContext([
+    [],
+    { error: { code: "42501", message: "host token credential" } },
+    [canonicalDiagnosticRow],
+  ], () => diagnoseCompletedProductionPrivateWorkspaceImport(productionOwnerRestorationWorkspaceOperationId));
+  assert.equal(diagnostic.schema.metadata, "permission-unavailable");
+  assert.equal(diagnostic.schema.evidence, "canonical-query-confirmed");
+  assert.equal(diagnostic.canonicalReader.matched, true);
+  assert.doesNotMatch(JSON.stringify(diagnostic), /host|token|credential/i);
+});
+
+test("completed-import diagnosis fails closed for malformed metadata and selector mismatch", async () => {
+  const diagnostic = await withDiagnosticContext([
+    [],
+    [{}],
+    [canonicalDiagnosticRow],
+  ], () => diagnoseCompletedProductionPrivateWorkspaceImport(productionOwnerRestorationWorkspaceOperationId));
+  assert.equal(diagnostic.schema.metadata, "unavailable");
+  assert.equal(diagnostic.canonicalReader.matched, true);
+  const mismatch = projectCompletedProductionPrivateWorkspaceImportDiagnostic({
+    operationId: productionOwnerRestorationWorkspaceOperationId,
+    tablePresence: { operations: true, workspaces: true, games: true, files: true },
+    databaseContext: diagnosticContext([]),
+    diagnosticDatabaseContext: { ...diagnosticContext([]), selectedKey: "POSTGRES_PRISMA_URL" },
+    row: canonicalDiagnosticRow,
+  });
+  assert.equal(mismatch.database.selectorMatch, false);
+  assert.equal(mismatch.canonicalReader.matched, false);
+});
+
+test("completed-import diagnosis classifies direct-query and detailed-contract failures without driver details", async () => {
+  await assert.rejects(
+    withDiagnosticContext([{ error: { code: "42P01", message: "raw table content" } }],
+      () => diagnoseCompletedProductionPrivateWorkspaceImport(productionOwnerRestorationWorkspaceOperationId)),
+    /OWNER_RESTORATION_DIAGNOSTIC_REQUIRED_TABLE_UNAVAILABLE/,
+  );
+  await assert.rejects(
+    withDiagnosticContext([{ error: { code: "42703", message: "raw column content" } }],
+      () => diagnoseCompletedProductionPrivateWorkspaceImport(productionOwnerRestorationWorkspaceOperationId)),
+    /OWNER_RESTORATION_DIAGNOSTIC_REQUIRED_COLUMN_UNAVAILABLE/,
+  );
+  await assert.rejects(
+    withDiagnosticContext([[], ...allPrivateImportObjects, { error: { code: "42703", message: "raw column content" } }],
+      () => diagnoseCompletedProductionPrivateWorkspaceImport(productionOwnerRestorationWorkspaceOperationId)),
+    /OWNER_RESTORATION_DIAGNOSTIC_QUERY_CONTRACT_MISMATCH/,
+  );
+  await assert.rejects(
+    withDiagnosticContext([{}], () => diagnoseCompletedProductionPrivateWorkspaceImport(productionOwnerRestorationWorkspaceOperationId)),
+    /OWNER_RESTORATION_DIAGNOSTIC_RESPONSE_PROJECTION_UNSUPPORTED/,
+  );
 });
 
 test("exact moi projection is strict, opaque, stable, and environment-bound", () => {
