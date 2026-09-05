@@ -162,6 +162,7 @@ fixed target.
   action target/result IDs, completion result IDs, and a fixed/mock-only data
   source. All IDs must be observable in the interactive prototype.
 - `publish_mock` is a compatibility tool name for the authoritative module-bound interactive prototype validation path; it rejects static HTML without shared SDK source.
+- Send canonical `source/**` bytes when available. The same `publish_mock` operation can losslessly normalize a path/content file list or starter `src/**` root and revalidate the current contract; it never invents missing creator code or changes module/human-approval gates.
 - Show the returned game URL and checklist, wait for explicit human approval,
   then call `approve_mock` for that exact `prototypeRevision`. AI self-approval is
   forbidden.

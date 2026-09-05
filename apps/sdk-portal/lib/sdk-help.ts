@@ -90,6 +90,15 @@ export const SDK_HELP_ENTRIES: readonly SdkHelpEntry[] = [
     keywords: ["未提出", "下書き", "試作", "保存", "マイゲーム", "一覧"],
     relatedToolNames: ["publish_mock", "list_creator_environments"],
   },
+  {
+    id: "prototype-input-recovery",
+    title: "操作プロトタイプ入力をそのまま継続する",
+    question: "publish_mockのfiles形式やsource pathが少し違う場合、ゲームを作り直す必要がありますか？",
+    answer:
+      "いいえ。現在のmodule contractを再取得したうえで、同一bytesのpath/content配列またはstarterのsrc/** rootは同じpublish_mock操作内でcanonical source/**へ補正して再検査します。制作者コードを推測生成しないため、欠損・空・競合するsourceや仕様・module変更は補正できません。その場合だけ具体的な不足または判断を解消してください。補正で保存できた場合は返された操作プロトタイプURLを確認し、本人の明示承認まで正式packageへ進みません。",
+    keywords: ["publish_mock", "files", "source", "src", "入力", "補正", "再検査", "prototype"],
+    relatedToolNames: ["get_game_module_requirements", "publish_mock", "approve_mock"],
+  },
 ];
 
 function normalize(value: string) {

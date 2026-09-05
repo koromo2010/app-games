@@ -75,6 +75,18 @@ test("authoring guidance consistently uses the published short module profile to
   assert.doesNotMatch(guidance, /prepare_game_module_profile_update/);
 });
 
+test("prototype input recovery guidance is available to both authoring clients and Portal Help", () => {
+  const guidance = [
+    "sdk/entry/START_CLAUDE_CODE.md",
+    "sdk/entry/START_GAME_FIELDS.md",
+    "apps/sdk-portal/public/GameFieldsDownloadMe-ver17.md",
+    "apps/sdk-portal/lib/sdk-help.ts",
+  ].map(read).join("\n");
+  assert.match(guidance, /src\/\*\*/);
+  assert.match(guidance, /source\/\*\*/);
+  assert.match(guidance, /module.*approval|承認/s);
+});
+
 test("development identity is visibly and semantically TEST ONLY", () => {
   const profiles = JSON.parse(read("config/sdk-release-profiles.json"));
   assert.equal(

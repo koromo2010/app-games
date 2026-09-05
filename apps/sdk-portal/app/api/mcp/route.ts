@@ -84,6 +84,7 @@ import {
   PublishMockPipelineError,
   publishMockPipeline,
 } from "@/lib/publish-mock-pipeline";
+import { recoverPublishMockInputFiles } from "@/lib/prototype-input-recovery";
 import {
   assertExpectedAccountContext,
   createAccountContext,
@@ -642,18 +643,16 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
     const gameId = typeof args.gameId === "string" ? args.gameId.trim().toLowerCase() : "";
     const title = typeof args.title === "string" ? args.title.trim() : "";
     const description = typeof args.description === "string" ? args.description.trim().slice(0, 500) : "";
-    if (!GAME_PATTERN.test(gameId) || !title || title.length > 120 || !args.files || typeof args.files !== "object" || Array.isArray(args.files)) throw new Error("SDK_PROTOTYPE_INPUT_INVALID");
-    const files = args.files as Record<string, string>;
-    for (const requiredSource of ["source/app-set.ts", "source/contracts.ts", "source/manifest.ts", "source/server-module.ts", "source/game-client.tsx", "source/prototype-adapter.ts"]) {
-      if (typeof files[requiredSource] !== "string" || !files[requiredSource].trim()) {
-        throw new Error("SDK_PROTOTYPE_INPUT_INVALID");
-      }
-    }
+    if (!GAME_PATTERN.test(gameId) || !title || title.length > 120) throw new Error("SDK_PROTOTYPE_INPUT_INVALID");
     const contract = await requireEstablishedCreatorGameModuleContract({
       creatorId: creator.id,
       gameId,
       origin,
     });
+    // Contract is read before recovery.  Recovery is strictly lossless and is
+    // revalidated by the same module usage and pipeline gates below.
+    const recovery = recoverPublishMockInputFiles(args.files);
+    const files = recovery.files;
     const usageAudit = validateGameSdkModuleUsage({
       contract,
       binding: args.moduleBinding,
@@ -681,7 +680,7 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       creatorSlug: slug,
       gameId,
     });
-    return respond({
+    const confirmation = {
       saved: true,
       gameId,
       prototypeRevision: saved.prototypeRevision,
@@ -689,10 +688,6 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       creatorUrl,
       gameUrl,
       previewUrl: gameUrl,
-      qualityEvidence: saved.qualityEvidence,
-      moduleBinding: saved.moduleBinding,
-      moduleUsage: saved.moduleUsage,
-      sharedSourceSha256: saved.sharedSourceSha256,
       reviewChecklist: [
         "ゲーム固有のレイアウトと情報階層が意図どおりか",
         "代表的な進行中状態と主操作の結果が理解できるか",
@@ -700,6 +695,15 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       ],
       humanApprovalRequired: true,
       approved: false,
+      instruction: "利用者へgameUrl、reviewChecklistを提示し、本人が実際に操作して明示承認するまでapprove_mockや正式Packageへ進まないでください。",
+    };
+    if (recovery.repaired) return respond(confirmation);
+    return respond({
+      ...confirmation,
+      qualityEvidence: saved.qualityEvidence,
+      moduleBinding: saved.moduleBinding,
+      moduleUsage: saved.moduleUsage,
+      sharedSourceSha256: saved.sharedSourceSha256,
       instruction: "利用者へgameUrl、moduleUsage、reviewChecklistを提示し、本人が実際に操作して明示承認するまでapprove_mockや正式Packageへ進まないでください。",
     });
   }

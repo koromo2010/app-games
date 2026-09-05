@@ -365,6 +365,8 @@ CALL publish_mock WITH {creatorSlug, game metadata, every validated mock/** file
 MUST_NOT run npm run publish:mock:legacy.
 ASSERT P_MOCK.
 
+When the submitted files are a lossless path/content list or use the starter `src/**` root, the same `publish_mock` operation may normalize them to canonical `source/**` and revalidate. Do not create another draft, change a module profile, or claim human approval to repair input. Missing or ambiguous creator code remains a concrete decision to resolve.
+
 IF NOT P_MOCK:
   EMIT C1.SUBMISSION_INCOMPLETE;
   HALT.
