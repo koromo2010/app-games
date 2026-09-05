@@ -75,6 +75,17 @@ export type ProductionPrivateWorkspaceImportTablePresence = {
   files: boolean;
 };
 
+type ReadOnlySql = {
+  query(statement: string, params?: unknown[]): Promise<unknown>;
+};
+
+class ProductionPrivateWorkspaceImportMetadataResponseError extends Error {
+  constructor() {
+    super("PRODUCTION_PRIVATE_WORKSPACE_IMPORT_METADATA_RESPONSE_INVALID");
+    this.name = "ProductionPrivateWorkspaceImportMetadataResponseError";
+  }
+}
+
 function tablePresenceFrom(values: Array<string | null | undefined>): ProductionPrivateWorkspaceImportTablePresence {
   return {
     operations: Boolean(values[0]),
@@ -88,16 +99,26 @@ function allProductionTablesPresent(presence: ProductionPrivateWorkspaceImportTa
   return Object.values(presence).every(Boolean);
 }
 
-async function productionTablePresence(sql: ReturnType<typeof sdkRuntimeSqlContext>["sql"]) {
-  const rows = await sql`
+const productionTablePresenceSelect = `
     SELECT ARRAY[
       to_regclass('public.sdk_production_private_workspace_import_operations')::TEXT,
       to_regclass('public.sdk_production_private_workspaces')::TEXT,
       to_regclass('public.sdk_production_private_workspace_games')::TEXT,
       to_regclass('public.sdk_production_private_workspace_files')::TEXT
     ] AS objects
-  ` as Array<{ objects?: Array<string | null> }>;
-  const presence = tablePresenceFrom(rows[0]?.objects ?? []);
+`;
+
+async function productionTablePresence(sql: ReadOnlySql) {
+  const response = await sql.query(productionTablePresenceSelect);
+  if (!Array.isArray(response) || response.length !== 1 || !response[0] || typeof response[0] !== "object") {
+    throw new ProductionPrivateWorkspaceImportMetadataResponseError();
+  }
+  const objects = (response[0] as { objects?: unknown }).objects;
+  if (!Array.isArray(objects) || objects.length !== productionPrivateWorkspaceImportObjectNames.length
+    || objects.some((value) => value !== null && typeof value !== "string")) {
+    throw new ProductionPrivateWorkspaceImportMetadataResponseError();
+  }
+  const presence = tablePresenceFrom(objects);
   const present = Object.values(presence).filter(Boolean).length;
   if (present !== 0 && present !== productionPrivateWorkspaceImportObjectNames.length) {
     throw new ProductionPrivateWorkspaceImportError("PRODUCTION_PRIVATE_IMPORT_UNAVAILABLE");
@@ -279,7 +300,6 @@ export async function readCompletedProductionPrivateWorkspaceImport(
   operationId: string,
 ): Promise<CompletedProductionPrivateWorkspaceImport | null> {
   const { sql } = sdkRuntimeSqlContext();
-  if (!allProductionTablesPresent(await productionTablePresence(sql))) return null;
   const rows = await sql.query(completedProductionPrivateWorkspaceImportSelect, [operationId]) as CompletedRow[];
   const row = rows[0];
   if (!row) return null;
@@ -307,6 +327,11 @@ export type ProductionPrivateWorkspaceImportCompletionDiagnostic = {
     canonicalReaderFingerprint: string | null;
     diagnosticFingerprint: string | null;
     fingerprintMatch: boolean;
+  };
+  schema: {
+    version: "not-version-gated";
+    evidence: "canonical-query-confirmed";
+    metadata: CompletionDiagnosticSchemaMetadata;
   };
   tables: {
     operations: DiagnosticStatus;
@@ -379,6 +404,18 @@ function all(row: Record<string, unknown>, key: string) {
 
 type CompletionDiagnosticDatabaseContext = Pick<ReturnType<typeof sdkRuntimeSqlContext>,
   "selectedKey" | "fallbackUsed" | "databaseTargetFingerprint" | "databaseNameFingerprint">;
+
+type CompletionDiagnosticRuntimeContext = CompletionDiagnosticDatabaseContext & { sql: ReadOnlySql };
+type CompletionDiagnosticSchemaMetadata = "confirmed" | "permission-unavailable" | "namespace-mismatch" | "unavailable";
+
+let completedProductionPrivateWorkspaceImportDiagnosticContextForTest: CompletionDiagnosticRuntimeContext | null = null;
+
+/** Test-only context hook; production always resolves the canonical SDK runtime context. */
+export function setCompletedProductionPrivateWorkspaceImportDiagnosticContextForTest(
+  context: CompletionDiagnosticRuntimeContext | null,
+) {
+  completedProductionPrivateWorkspaceImportDiagnosticContextForTest = context;
+}
 
 function completionDatabaseFingerprint(context: CompletionDiagnosticDatabaseContext) {
   if (!context.databaseTargetFingerprint || !context.databaseNameFingerprint) return null;
@@ -470,19 +507,24 @@ export function projectCompletedProductionPrivateWorkspaceImportDiagnostic(input
   operationId: string;
   tablePresence: ProductionPrivateWorkspaceImportTablePresence;
   databaseContext: CompletionDiagnosticDatabaseContext;
+  diagnosticDatabaseContext?: CompletionDiagnosticDatabaseContext;
+  schemaMetadata?: CompletionDiagnosticSchemaMetadata;
   row?: Record<string, unknown>;
 }): ProductionPrivateWorkspaceImportCompletionDiagnostic {
-  const { operationId, tablePresence, databaseContext, row = {} } = input;
+  const { operationId, tablePresence, databaseContext, diagnosticDatabaseContext = databaseContext,
+    schemaMetadata = "confirmed", row = {} } = input;
   const tablesPresent = allProductionTablesPresent(tablePresence);
-  const bindingFingerprint = completionDatabaseFingerprint(databaseContext);
+  const canonicalFingerprint = completionDatabaseFingerprint(databaseContext);
+  const diagnosticFingerprint = completionDatabaseFingerprint(diagnosticDatabaseContext);
   const database = {
     canonicalReaderSelector: databaseContext.selectedKey,
-    diagnosticSelector: databaseContext.selectedKey,
-    selectorMatch: true,
-    canonicalReaderFingerprint: bindingFingerprint,
-    diagnosticFingerprint: bindingFingerprint,
-    fingerprintMatch: bindingFingerprint !== null,
+    diagnosticSelector: diagnosticDatabaseContext.selectedKey,
+    selectorMatch: databaseContext.selectedKey === diagnosticDatabaseContext.selectedKey,
+    canonicalReaderFingerprint: canonicalFingerprint,
+    diagnosticFingerprint,
+    fingerprintMatch: canonicalFingerprint !== null && canonicalFingerprint === diagnosticFingerprint,
   };
+  const schema = { version: "not-version-gated", evidence: "canonical-query-confirmed", metadata: schemaMetadata } as const;
   const tables = {
     operations: diagnosticStatus(tablePresence.operations, true),
     workspaces: diagnosticStatus(tablePresence.workspaces, true),
@@ -494,6 +536,7 @@ export function projectCompletedProductionPrivateWorkspaceImportDiagnostic(input
       schemaVersion: 1,
       operationId,
       database,
+      schema,
       tables,
       operation: { row: "not-assessed", operationIdExact: "not-assessed", nonceExact: "not-assessed", environmentExact: "not-assessed", intentExact: "not-assessed", state: "not-assessed", phase: "not-assessed", terminalReceiptPresent: "not-assessed", readBackShaPresent: "not-assessed" },
       workspace: { join: "not-assessed", identityExact: "not-assessed", targetExact: "not-assessed", environmentExact: "not-assessed", privateQuarantined: "not-assessed", ownerUnbound: "not-assessed" },
@@ -553,7 +596,7 @@ export function projectCompletedProductionPrivateWorkspaceImportDiagnostic(input
   if (Object.values(integrity).some((value) => value !== "pass")) excludedBy.push("INTEGRITY");
   if (Object.values(nonEffects).some((value) => value !== "pass")) excludedBy.push("NON_EFFECTS");
   const matched = all(row, "canonicalReaderMatched") && excludedBy.length === 0;
-  return { schemaVersion: 1, operationId, database, tables, operation, workspace, integrity, nonEffects, canonicalReader: { matched, excludedBy } };
+  return { schemaVersion: 1, operationId, database, schema, tables, operation, workspace, integrity, nonEffects, canonicalReader: { matched, excludedBy } };
 }
 
 /**
@@ -563,34 +606,73 @@ export function projectCompletedProductionPrivateWorkspaceImportDiagnostic(input
 export async function diagnoseCompletedProductionPrivateWorkspaceImport(
   operationId: string,
 ): Promise<ProductionPrivateWorkspaceImportCompletionDiagnostic> {
-  let context: ReturnType<typeof sdkRuntimeSqlContext>;
+  let context: CompletionDiagnosticRuntimeContext;
   try {
-    context = sdkRuntimeSqlContext();
+    context = completedProductionPrivateWorkspaceImportDiagnosticContextForTest ?? sdkRuntimeSqlContext();
   } catch {
     throw new ProductionOwnerRestorationDiagnosticError(
       "OWNER_RESTORATION_DIAGNOSTIC_DATABASE_SELECTOR_UNAVAILABLE",
     );
   }
-  let tablePresence: ProductionPrivateWorkspaceImportTablePresence;
+
+  try {
+    const canonicalRows = await context.sql.query(completedProductionPrivateWorkspaceImportSelect, [operationId]);
+    if (!Array.isArray(canonicalRows) || canonicalRows.some((row) => !row || typeof row !== "object" || Array.isArray(row))) {
+      throw new ProductionPrivateWorkspaceImportMetadataResponseError();
+    }
+  } catch (error) {
+    if (error instanceof ProductionPrivateWorkspaceImportMetadataResponseError) {
+      throw new ProductionOwnerRestorationDiagnosticError(
+        "OWNER_RESTORATION_DIAGNOSTIC_RESPONSE_PROJECTION_UNSUPPORTED",
+      );
+    }
+    throw new ProductionOwnerRestorationDiagnosticError(diagnosticQueryFailureCode(error));
+  }
+
+  let tablePresence: ProductionPrivateWorkspaceImportTablePresence = {
+    operations: true, workspaces: true, games: true, files: true,
+  };
+  let schemaMetadata: CompletionDiagnosticSchemaMetadata = "confirmed";
   try {
     tablePresence = await productionTablePresence(context.sql);
   } catch (error) {
-    throw new ProductionOwnerRestorationDiagnosticError(diagnosticQueryFailureCode(error));
+    const code = error && typeof error === "object" && typeof (error as { code?: unknown }).code === "string"
+      ? (error as { code: string }).code
+      : "";
+    schemaMetadata = code === "42501" ? "permission-unavailable" : "unavailable";
   }
-  const tablesPresent = allProductionTablesPresent(tablePresence);
-  let row: Record<string, unknown> | undefined;
-  if (tablesPresent) {
-    try {
-      row = (await context.sql.query(productionPrivateWorkspaceImportDiagnosticSelect, [operationId]) as Array<Record<string, unknown>>)[0] ?? {};
-    } catch (error) {
-      throw new ProductionOwnerRestorationDiagnosticError(diagnosticQueryFailureCode(error));
+  if (!allProductionTablesPresent(tablePresence)) schemaMetadata = "namespace-mismatch";
+
+  let row: Record<string, unknown>;
+  try {
+    const rows = await context.sql.query(productionPrivateWorkspaceImportDiagnosticSelect, [operationId]);
+    if (!Array.isArray(rows) || rows.some((value) => !value || typeof value !== "object" || Array.isArray(value))) {
+      throw new ProductionPrivateWorkspaceImportMetadataResponseError();
     }
+    row = (rows[0] as Record<string, unknown> | undefined) ?? {};
+  } catch (error) {
+    if (error instanceof ProductionPrivateWorkspaceImportMetadataResponseError) {
+      throw new ProductionOwnerRestorationDiagnosticError(
+        "OWNER_RESTORATION_DIAGNOSTIC_RESPONSE_PROJECTION_UNSUPPORTED",
+      );
+    }
+    const code = error && typeof error === "object" && typeof (error as { code?: unknown }).code === "string"
+      ? (error as { code: string }).code
+      : "";
+    if (code === "42P01" || code === "42703") {
+      throw new ProductionOwnerRestorationDiagnosticError(
+        "OWNER_RESTORATION_DIAGNOSTIC_QUERY_CONTRACT_MISMATCH",
+      );
+    }
+    throw new ProductionOwnerRestorationDiagnosticError(diagnosticQueryFailureCode(error));
   }
   try {
     return projectCompletedProductionPrivateWorkspaceImportDiagnostic({
       operationId,
       tablePresence,
       databaseContext: context,
+      diagnosticDatabaseContext: context,
+      schemaMetadata,
       row,
     });
   } catch {
