@@ -13,6 +13,7 @@ import { rememberTahoiyaDeviceTopic, syncTahoiyaDeviceTopicHistory } from "./tah
 import { useGameplayActionWindow } from "@/app/hooks/use-gameplay-action-window";
 import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
 import { tahoiyaPhaseTimeLimitSeconds } from "@/lib/tahoiya-room-domain";
+import { useBuiltInGameRulesPresentation } from "@/app/hooks/use-game-rules-presentation";
 
 export function useTahoiyaController() {
   const [room, setRoom] = useState<TahoiyaRoom | null>(null);
@@ -35,7 +36,7 @@ export function useTahoiyaController() {
   const [skipComment, setSkipComment] = useState("");
   const [isSkippingTopic, setIsSkippingTopic] = useState(false);
   const [message, setMessage] = useState("");
-  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useBuiltInGameRulesPresentation("tahoiya");
   const { ready, isRestoringRoom, resultReturnGate } = useTahoiyaRoomSession({ room, playerId, setRoom, setPlayerId, setActivePlayerId, setPlayerName, setAvatarColor, setAvatarImage, setMessage });
 
   useEffect(() => {

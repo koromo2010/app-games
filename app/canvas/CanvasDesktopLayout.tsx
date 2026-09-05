@@ -143,7 +143,7 @@ export function CanvasDesktopLayout({ controller }: { controller: CanvasControll
       </div>
     </section>
 
-    <GameRulesDialog open={rulesOpen} title="キャンバスの使い方" onClose={() => setRulesOpen(false)}>
+    <GameRulesDialog open={rulesOpen} title="キャンバスの使い方" onClose={() => setRulesOpen(false)} gameId="canvas">
       <p>マウス、指、ペン、キーボードで自由に絵を描けるキャンバスです。今は描き心地や操作方法を試すためのテスト版です。</p>
       <h3 className="mt-4 font-black text-white">基本の描き方</h3>
       <ol className="mt-2 list-decimal space-y-2 pl-5">

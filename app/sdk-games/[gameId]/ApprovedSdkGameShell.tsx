@@ -36,6 +36,8 @@ import { authoritativeTimerErrorDirective } from "@/lib/game-timer/retry";
 import { observeServerDate } from "@/lib/server-clock";
 import { useGameplayActionWindow } from "@/app/hooks/use-gameplay-action-window";
 import { consumeOnlineRoomDiscovery, trackOnlineRoomDiscovery } from "@/lib/online-room-discovery";
+import { bindGameRules, type BoundGameRules } from "@/lib/game-rules";
+import { GameRulesDisclosure } from "@/app/components/GameRulePresentation";
 
 type WordWolfRoomView = GameSdkOnlineRoomView<
   {
@@ -59,6 +61,7 @@ type Props = {
   title: string;
   settingDefinitions: readonly GameSdkSettingDefinition[];
   rules: readonly string[];
+  ruleSet: BoundGameRules | null;
 };
 
 const panelClass =
@@ -92,6 +95,7 @@ export function ApprovedSdkGameShell({
   title,
   settingDefinitions,
   rules,
+  ruleSet,
 }: Props) {
   const runtime = useMemo(() => createGameSdkHttpClientRuntime<
     {
@@ -430,6 +434,7 @@ export function ApprovedSdkGameShell({
           eyebrow="SDK GAME"
           title={title}
           rules={rules}
+          ruleSet={ruleSet}
           backHref="/games"
           backLabel="広場へ戻る"
           surface="lounge"
@@ -445,6 +450,7 @@ export function ApprovedSdkGameShell({
           </section>
         ) : (
         <section className="mx-auto grid w-full gap-5 lg:grid-cols-2">
+          <GameRulesDisclosure ruleSet={ruleSet} surface="creation" />
           <div className={panelClass}>
             <h2 className="text-2xl font-black">新しい部屋</h2>
             <p className="mt-2 text-sm text-slate-600">
@@ -527,6 +533,7 @@ export function ApprovedSdkGameShell({
         eyebrow={`ROOM ${room.code}`}
         title={title}
         rules={rules}
+        ruleSet={bindGameRules(ruleSet, `builtin:${gameId}:sdk-2`)}
         backHref="/games"
         backLabel="広場へ戻る"
         surface={
@@ -548,6 +555,7 @@ export function ApprovedSdkGameShell({
       </GameSdkShellHeader>
       <section className="mx-auto grid w-full gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="space-y-4">
+          <GameRulesDisclosure ruleSet={bindGameRules(ruleSet, `builtin:${gameId}:sdk-2`)} surface="lobby" />
           <div className={panelClass}>
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-black">{room.phase === "lobby" ? "ゲーム開始前" : room.phase === "result" ? "結果" : "プレイ中"}</h2>

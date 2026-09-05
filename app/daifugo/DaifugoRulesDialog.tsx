@@ -5,7 +5,7 @@ import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 
 export function DaifugoRulesDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { locale } = useAppLocale();
-  if (locale === "en") return <GameRulesDialog open={open} title="Daifugo Rules" onClose={onClose}>
+  if (locale === "en") return <GameRulesDialog open={open} title="Daifugo Rules" onClose={onClose} gameId="daifugo">
     <div className="space-y-5">
       <section><h3 className="font-black text-white">What is Daifugo?</h3><p>Three to six players take turns playing cards stronger than the table. Empty your hand before everyone else. CPU Practice pits you against three CPU players.</p></section>
       <section><h3 className="font-black text-white">Setup</h3><p>Deal a 53-card deck containing one joker. The holder of the 3 of diamonds starts, and the first play must include that card.</p></section>
@@ -15,7 +15,7 @@ export function DaifugoRulesDialog({ open, onClose }: { open: boolean; onClose: 
       <section><h3 className="font-black text-white">Turn timeout</h3><p>Online rooms may set a turn timer. On timeout, the game passes if cards are on the table; on an empty table it automatically plays the weakest legal set. Set the timer to zero for no limit. CPU Practice has no timer.</p></section>
     </div>
   </GameRulesDialog>;
-  return <GameRulesDialog open={open} title="大富豪のルール" onClose={onClose}>
+  return <GameRulesDialog open={open} title="大富豪のルール" onClose={onClose} gameId="daifugo">
     <div className="space-y-5">
       <section><h3 className="font-black text-white">何をするゲーム？</h3><p>3〜6人で場より強いカードを順番に出し、誰より早く手札をなくすゲームです。CPU練習では、あなた1人とCPU3人で遊べます。</p></section>
       <section><h3 className="font-black text-white">準備</h3><p>ジョーカー1枚を加えた53枚を配ります。ダイヤの3を持つ人から始まり、最初だけ必ずダイヤの3を含めて出します。</p></section>

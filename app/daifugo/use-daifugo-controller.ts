@@ -16,6 +16,7 @@ import { authoritativeTimerErrorDirective } from "@/lib/game-timer/retry";
 import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 import type { PlayerSession } from "@/lib/player-session";
 import { daifugoText, localizeDaifugoPlayError, type DaifugoCopy } from "./daifugo-i18n";
+import { useBuiltInGameRulesPresentation } from "@/app/hooks/use-game-rules-presentation";
 
 const lastRoomKey = "daifugo-last-room";
 const ownerIdKey = "daifugo-owner-id";
@@ -51,7 +52,7 @@ export function useDaifugoController() {
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
   const [debugControlledPlayerId, setDebugControlledPlayerId] = useState("");
   const [saving, setSaving] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useBuiltInGameRulesPresentation("daifugo");
   const loadSessionOnce = useOnlineGameSessionLoadOnce();
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "result", onReturnUnavailable: () => setError(d.returnUnavailable) });
 

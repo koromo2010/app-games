@@ -3,6 +3,7 @@ import { builtInCapabilityPolicy } from "./built-in-game-module-policies";
 import { sdkGamePreviewHref } from "./sdk-game-preview-navigation";
 import { gameCatalogHref } from "@/lib/game-routes";
 import { builtInGameLocaleRegistry, type GameLocalePolicy } from "@/lib/game-locale-registry";
+import { getBuiltInGameRules, type BoundGameRules } from "@/lib/game-rules";
 
 export type GameDefinitionTag = "対戦" | "協力" | "チーム戦" | "正体隠匿" | "会話" | "ブラフ" | "作文" | "戦略" | "連想" | "推理" | "お絵描き";
 
@@ -14,6 +15,7 @@ export type GameCatalogDefinition = {
   players: string;
   time: string;
   summary: string;
+  rules: BoundGameRules | null;
   accent: string;
   private: boolean;
   stats: "account" | "local-disabled";
@@ -103,6 +105,8 @@ export type GameDefinition = {
 
 export function builtInGameDefinitions(): GameDefinition[] {
   return registry.map((game) => {
+    const rules = getBuiltInGameRules(game.id);
+    if (!rules) throw new Error(`Missing normalized rules for built-in game ${game.id}.`);
     return ({
     id: game.id,
     catalog: {
@@ -112,7 +116,8 @@ export function builtInGameDefinitions(): GameDefinition[] {
       tags: game.tags as GameDefinitionTag[],
       players: game.players,
       time: game.time,
-      summary: game.summary,
+      summary: rules.sections.summary,
+      rules,
       accent: game.accent,
       private: game.private,
       stats: game.stats as GameCatalogDefinition["stats"],

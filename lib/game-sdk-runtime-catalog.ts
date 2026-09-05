@@ -38,6 +38,7 @@ import {
   resolveApprovedSdkGamePresentation,
 } from "../config/sdk-game-presentations.ts";
 import { publicGameCatalogVersion } from "./public-game-catalog-cache.ts";
+import { getSdkGameRules } from "./game-rules.ts";
 
 type RuntimeCatalogChannel = "development" | "main";
 
@@ -155,6 +156,12 @@ export async function loadApprovedGameSdkCatalogSnapshot(
       time: "未計測",
       summary: game.description.trim().slice(0, 240)
         || presentation.title.ja,
+      rules: getSdkGameRules({
+        gameId: game.id,
+        revision: game.revision,
+        locale: "ja",
+        ruleSections: game.manifest.ruleSections,
+      }),
       accent: "from-cyan-300 via-emerald-200 to-amber-200",
       private: false,
       stats: moduleProfile.stats.mode === "required"
@@ -392,6 +399,7 @@ export async function loadApprovedGameSdkRuntimeRegistration(
     moduleProfile: payload.moduleProfile,
     settings: payload.manifest.settings ?? [],
     rules: (payload.manifest.rules ?? []).map((rule) => rule.ja),
+    ruleSections: payload.manifest.ruleSections,
     createAdapter(
       resolveIdentity: () => Promise<GameFieldsAuthenticatedIdentity>,
       adapterRequest: Request,

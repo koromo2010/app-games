@@ -3,7 +3,7 @@ import { builtInGameDefinitions, catalogEntryFromDefinition, type GameDefinition
 
 export type GameTag = GameDefinitionTag;
 
-export type GameCatalogEntry = { id: string; title: string; englishTitle?: string; visual: string; tags: GameTag[]; href: string; players: string; time: string; timeSampleCount?: number; summary: string; accent: string; private: boolean; stats: "account" | "local-disabled"; localePolicy?: import("@/lib/game-locale-registry").GameLocalePolicy };
+export type GameCatalogEntry = { id: string; title: string; englishTitle?: string; visual: string; tags: GameTag[]; href: string; players: string; time: string; timeSampleCount?: number; summary: string; rules: import("@/lib/game-rules").BoundGameRules | null; accent: string; private: boolean; stats: "account" | "local-disabled"; localePolicy?: import("@/lib/game-locale-registry").GameLocalePolicy };
 
 export const games: GameCatalogEntry[] = builtInGameDefinitions().map(catalogEntryFromDefinition);
 

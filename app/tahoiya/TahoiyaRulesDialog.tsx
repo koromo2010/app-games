@@ -1,7 +1,7 @@
 import { GameRulesDialog } from "../components/GameRulesDialog";
 
 export function TahoiyaRulesDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return <GameRulesDialog open={open} title="たほい屋のルール" onClose={onClose}>
+  return <GameRulesDialog open={open} title="たほい屋のルール" onClose={onClose} gameId="tahoiya">
     <p>知らないことばの「本当の意味」を当てるゲームです。本物の説明に、みんなが考えた偽の説明を混ぜます。本物を見抜くだけでなく、自分の偽説明を本物だと思わせても得点できます。</p>
     <h3 className="mt-4 font-black text-white">最初に知っておくこと</h3>
     <ul className="mt-2 list-disc space-y-2 pl-5"><li>お題には、ふだん見かけないことばが選ばれます。最初から意味を知っていなくても問題ありません。</li><li>偽説明は、面白い文章よりも「辞書にありそうな文章」を目指すと、ほかの人をだましやすくなります。</li><li>本物とすべての偽説明は、投票が終わるまで作者を隠して表示されます。</li></ul>

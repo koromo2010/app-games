@@ -9,6 +9,7 @@ import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate
 import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyCodeInterceptRoomAction, codeInterceptRoomApi, createCodeInterceptRoom, fetchCodeInterceptDebugWords } from "./code-intercept-room-api-client";
 import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
+import { useBuiltInGameRulesPresentation } from "@/app/hooks/use-game-rules-presentation";
 import {
   codeInterceptAnswererIds,
   codeInterceptDraftScope,
@@ -95,7 +96,7 @@ export function useCodeInterceptController() {
   const [allyDraftsByRound, setAllyDraftsByRound] = useState<Record<string, number[]>>({});
   const [interceptDraftsByRound, setInterceptDraftsByRound] = useState<Record<string, number[]>>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useBuiltInGameRulesPresentation("code-intercept");
   const timeoutClueSubmissionKeyRef = useRef("");
   const timeoutExpiryKeyRef = useRef("");
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "game-result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });

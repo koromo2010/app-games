@@ -10,6 +10,7 @@ import {
 import { SdkPreviewSessionGate } from "@/app/sdk-preview/SdkPreviewSessionGate";
 import { sdkPreviewPackageRuntimeId } from "@/lib/sdk-preview-package-runtime";
 import { SdkPreviewNavigationBridge } from "@/app/sdk-preview/SdkPreviewNavigationBridge";
+import { getSdkGameRules } from "@/lib/game-rules";
 
 export const dynamic = "force-dynamic";
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
@@ -123,6 +124,12 @@ export default async function SdkGamePage({
           title={game.title}
           settingDefinitions={game.settings}
           rules={(game.manifest.rules ?? []).map((rule) => rule.ja)}
+          ruleSet={getSdkGameRules({
+            gameId,
+            revision: game.revision,
+            locale: "ja",
+            ruleSections: game.manifest.ruleSections,
+          })}
           moduleProfile={creatorVisibleGameSdkModuleProfile(game.modulePolicy)}
           supportsReplay={game.manifest.supportsReplay}
           supportsSpectators={game.manifest.supportsSpectators}

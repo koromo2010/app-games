@@ -9,6 +9,7 @@ import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation"
 import { applyNigoichiRoomAction, createNigoichiRoom, nigoichiRoomApi } from "./nigoichi-room-api-client";
 import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
 import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
+import { useBuiltInGameRulesPresentation } from "@/app/hooks/use-game-rules-presentation";
 import {
   areValidNigoichiAssociations,
   nigoichiConfigBounds,
@@ -66,7 +67,7 @@ export function useNigoichiController() {
   const timeoutExpiryKeyRef = useRef("");
   const [guessSelection, setGuessSelection] = useState<{ roundKey: string; number: number } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useBuiltInGameRulesPresentation("nigoichi");
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
 
   const roomCode = room?.code;

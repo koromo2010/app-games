@@ -5,6 +5,7 @@ import type {
 } from "@game-fields/game-sdk";
 import type { VisibleGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 import type { createGameSdkHttpClientRuntime } from "@game-fields/game-sdk/client-runtime";
+import type { BoundGameRules } from "@/lib/game-rules";
 
 export type CommonView = {
   phase: string;
@@ -97,6 +98,8 @@ export type GameSdkFrameProps = {
   title: string;
   settingDefinitions: readonly GameSdkSettingDefinition[];
   rules: readonly string[];
+  /** Immutable projection for this accepted package revision. */
+  ruleSet?: BoundGameRules | null;
   moduleProfile: VisibleGameSdkModuleProfile;
   supportsReplay: boolean;
   supportsSpectators: boolean;

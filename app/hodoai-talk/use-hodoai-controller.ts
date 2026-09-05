@@ -8,6 +8,7 @@ import { useHodoaiRoomActions } from "./use-hodoai-room-actions";
 import { useHodoaiRoomSession } from "./use-hodoai-room-session";
 import { useHodoaiViewModel } from "./use-hodoai-view-model";
 import { hodoaiRoomApi } from "./hodoai-room-api-client";
+import { useBuiltInGameRulesPresentation } from "@/app/hooks/use-game-rules-presentation";
 
 export function useHodoaiController() {
   const [room, setRoom] = useState<HodoaiRoom | null>(null);
@@ -17,7 +18,7 @@ export function useHodoaiController() {
   const [choices, setChoices] = useState<HodoaiRoomChoice[]>([]);
   const [showChoices, setShowChoices] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useBuiltInGameRulesPresentation("hodoai");
 
   const { session, ready, isRestoringRoom, playerId, resultReturnGate } = useHodoaiRoomSession({ room, setRoom, setError });
   const viewModel = useHodoaiViewModel(room, playerId);

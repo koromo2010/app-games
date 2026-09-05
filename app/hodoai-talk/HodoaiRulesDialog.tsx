@@ -1,7 +1,7 @@
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 
 export function HodoaiRulesDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return <GameRulesDialog open={open} title="ワードスケールのルール" onClose={onClose}>
+  return <GameRulesDialog open={open} title="ワードスケールのルール" onClose={onClose} gameId="hodoai">
     <p>みんなで力を合わせる協力ゲームです。全員に0〜120の秘密の数字が配られます。その数字を直接言わず、お題に合うことばで伝え、最後に全員のカードを数字の小さい順へ並べます。</p>
     <h3 className="mt-4 font-black text-white">ゲームの準備</h3>
     <ul className="mt-2 list-disc space-y-2 pl-5"><li>ホストが、1人に配るカードの枚数と、同じ数字についてことばを出す回数を決めます。</li><li>ゲーム開始時に、全員へ0〜120の異なる数字を配ります。自分の数字だけを見ることができ、ほかの人の数字は最後まで見えません。</li><li>最後にカードを動かす「並べ替え役」は、ゲーム開始時に参加者からランダムで1人選ばれます。</li></ul>

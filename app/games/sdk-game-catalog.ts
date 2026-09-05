@@ -2,6 +2,7 @@ import type { GameCatalogEntry, GameTag } from "./game-catalog";
 import { catalogEntryFromDefinition, lockedPlatformModules, type GameDefinition, type GameModulePolicy } from "./game-definition-source";
 import { isSdkPackageRevision } from "./sdk-game-preview-navigation";
 import type { GameSdkLocalePolicy } from "@game-fields/game-sdk";
+import type { BoundGameRules } from "@/lib/game-rules";
 
 export type SdkGameDescriptor = {
   id: string;
@@ -14,6 +15,7 @@ export type SdkGameDescriptor = {
   visual?: string;
   modules?: GameModulePolicy["capabilities"];
   localePolicy?: GameSdkLocalePolicy;
+  rules?: BoundGameRules | null;
 };
 
 const allowedTags = new Set<GameTag>([
@@ -36,6 +38,7 @@ export function sdkGamesForCatalog(creatorSlug: string, descriptors: readonly Sd
       players: game.players || "人数設定あり",
       time: game.time || "未計測",
       summary: game.description,
+      rules: game.rules ?? null,
       accent: "from-cyan-300 via-emerald-200 to-amber-200",
       private: false,
       stats: "local-disabled",

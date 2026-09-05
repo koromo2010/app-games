@@ -13,6 +13,7 @@ import { activeCanvasLobbyStrokes } from "@/lib/canvas-lobby-board";
 import { canvasFeatures } from "@/lib/canvas-features";
 import { shouldHandleGameKeyboardEvent } from "@/app/components/keyboard-focus-contract";
 import { canAcceptRoomRevision, canEstablishRoomFromLobby, isRoomScopedResponseCurrent, recordRoomRevision } from "@/lib/room-scoped-reconciliation";
+import { useBuiltInGameRulesPresentation } from "@/app/hooks/use-game-rules-presentation";
 
 const storageKey = "canvas-prototype-board";
 const channelName = "game-fields-canvas-prototype";
@@ -35,7 +36,7 @@ export function useCanvasController() {
   const [boardFullscreen, setBoardFullscreen] = useState(false);
   const [fullscreenToolsOpen, setFullscreenToolsOpen] = useState(false);
   const [tool, setTool] = useState<"pen" | "eraser" | "eyedropper" | "fill" | "pan">("pen");
-  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useBuiltInGameRulesPresentation("canvas");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [syncNotice, setSyncNotice] = useState("この端末に自動保存します");

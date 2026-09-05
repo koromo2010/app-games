@@ -232,7 +232,7 @@ export function CodeInterceptDesktopLayout({ controller }: { controller: CodeInt
     returnToRoom, sampleDebugWords,
   } = actions;
 
-  const rulesDialog = <GameRulesDialog open={rulesOpen} title="コードインターセプトのルール" onClose={() => setRulesOpen(false)}>
+  const rulesDialog = <GameRulesDialog open={rulesOpen} title="コードインターセプトのルール" onClose={() => setRulesOpen(false)} gameId="code-intercept">
     <p>4人以上で赤と青の2チームに分かれて遊びます。味方には暗号を正しく伝えつつ、敵チームがどの番号を伝えているのかも当てるゲームです。</p>
     <h3 className="mt-4 font-black text-white">秘密の単語と暗号</h3>
     <div className="mt-2 space-y-2 text-slate-300">

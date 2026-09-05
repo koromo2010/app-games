@@ -25,6 +25,7 @@ import {
   gameSdkShellNavigationPlacement,
   type GameSdkShellSurface,
 } from "@/lib/game-sdk-shell-navigation";
+import type { BoundGameRules } from "@/lib/game-rules";
 
 export type GameSdkDebugRoom = {
   appPhase: string | null;
@@ -76,6 +77,7 @@ type Props = {
   eyebrow: string;
   title: string;
   rules: readonly string[];
+  ruleSet?: BoundGameRules | null;
   backHref: string;
   backLabel: string;
   surface: GameSdkShellSurface;
@@ -97,6 +99,7 @@ export function GameSdkShellHeader({
   eyebrow,
   title,
   rules,
+  ruleSet = null,
   backHref,
   backLabel,
   surface,
@@ -217,7 +220,7 @@ export function GameSdkShellHeader({
             DEBUG · ON
           </button>
         )}
-        {rules.length > 0 && (
+        {(ruleSet || rules.length > 0) && (
           <button
             type="button"
             className={gameTopBannerActionClass}
@@ -399,6 +402,7 @@ export function GameSdkShellHeader({
         open={rulesOpen}
         title={`${title}のルール`}
         onClose={() => setRulesOpen(false)}
+        ruleSet={ruleSet}
       >
         <ol className="list-decimal space-y-3 pl-5">
           {rules.map((rule, index) => (

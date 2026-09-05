@@ -101,10 +101,28 @@ Game Fieldsがpersonal／Game Fields提供枠／共有無料枠、provider fallb
 
 `manifest.settings` is the app-owned declaration for the shared room settings screen. The Platform renders only the declared fields; it does not add maximum-player or round-count inputs automatically.
 
-`manifest.rules` is the app-owned localized rule list. The shared Shell renders
-these rules without requiring a second game-specific rules panel. Signed-in
-players may save the current declared settings as their defaults for the next
-room; undeclared keys and invalid option values are discarded by the Platform.
+`manifest.rules` remains the compact, localized compatibility list. New
+packages should also declare `manifest.ruleSections` with all of `summary`,
+`playerActions`, `winCondition`, `detailedRules`, and `playExample`, each in
+every declared UI language. The shared Shell binds that complete projection to
+the accepted package revision. It never substitutes text from a newer revision
+into an existing Room; an incomplete or mismatched projection is shown as
+unavailable rather than guessed. Rules are informational: reading them does not
+create a Room, start a game, or record a player acknowledgement.
+
+```ts
+ruleSections: {
+  summary: { ja: "何をするゲームか", en: "What players do" },
+  playerActions: { ja: "各プレイヤーの操作", en: "Player actions" },
+  winCondition: { ja: "勝敗の決め方", en: "Win condition" },
+  detailedRules: { ja: "進行と例外", en: "Flow and exceptions" },
+  playExample: { ja: "一手の具体例", en: "A concrete turn" },
+},
+```
+
+Signed-in players may save the current declared settings as their defaults for
+the next room; undeclared keys and invalid option values are discarded by the
+Platform.
 
 Every `online-room` manifest must declare exactly one setting with `platformRole: "time-limit"`. The app owns that setting's `defaultValue` and `options`, including whether `0` is offered as no limit. Other fields are optional. Use `platformRole: "maximum-players"` or `"round-count"` only when the shared shell needs those meanings.
 

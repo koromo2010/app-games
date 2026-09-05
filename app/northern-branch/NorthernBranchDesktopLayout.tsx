@@ -60,7 +60,7 @@ export function NorthernBranchDesktopLayout({ controller }: { controller: Northe
     leaveRoom, returnToRoom,
   } = actions;
 
-  const rulesDialog = <GameRulesDialog open={rulesOpen} title="ノーザンブランチのルール" onClose={() => setRulesOpen(false)}>
+  const rulesDialog = <GameRulesDialog open={rulesOpen} title="ノーザンブランチのルール" onClose={() => setRulesOpen(false)} gameId="northern-branch">
     <p>資源を集めて商品を作り、建物を増やして自分の商会を育てるゲームです。「勝利点」をいちばん早く10点集めた人が勝ちます。</p>
     <h3 className="mt-4 font-black text-white">ゲームの見方</h3>
     <ul className="mt-2 list-disc space-y-2 pl-5">

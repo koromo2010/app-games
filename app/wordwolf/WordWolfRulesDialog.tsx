@@ -3,7 +3,7 @@ import { GameRulesDialog } from "../components/GameRulesDialog";
 type Props = { open: boolean; onClose: () => void };
 
 export function WordWolfRulesDialog({ open, onClose }: Props) {
-  return <GameRulesDialog open={open} title="ワードウルフのルール" onClose={onClose}>
+  return <GameRulesDialog open={open} title="ワードウルフのルール" onClose={onClose} gameId="wordwolf">
     <p>みんなで似たお題について話し、少し違うお題を渡された「狼」を探すゲームです。たとえば、市民のお題が「うどん」、狼のお題が「そば」のように、話が通じそうで少しだけ違う組み合わせが出ます。</p>
     <h3 className="mt-4 font-black text-white">最初に知っておくこと</h3>
     <ul className="mt-2 list-disc space-y-2 pl-5">

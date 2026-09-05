@@ -1,4 +1,4 @@
-import type { GameSdkLocalePolicy, GameSdkSettingDefinition } from "@game-fields/game-sdk";
+import type { GameSdkLocalePolicy, GameSdkRuleSections, GameSdkSettingDefinition } from "@game-fields/game-sdk";
 import {
   createInitialGameSdkModuleProfile,
   type GameSdkModuleProfile,
@@ -29,6 +29,7 @@ export type ApprovedGameSdkRegistration = {
   clientKind: "wordwolf" | "iframe-package";
   clientRuntimeUrl?: string;
   revision?: string;
+  ruleSections?: GameSdkRuleSections;
   sourceCreatorSlug?: string;
   sourceGameId?: string;
   packageRootSha256?: string;
@@ -55,6 +56,7 @@ const registrations: readonly ApprovedGameSdkRegistration[] = [
   {
     id: wordWolfSdkServerModule.manifest.id,
     title: wordWolfSdkServerModule.manifest.title.ja,
+    revision: `builtin:${wordWolfSdkServerModule.manifest.id}:sdk-${wordWolfSdkServerModule.manifest.sdkVersion}`,
     clientKind: "wordwolf",
     deployment: "develop-only",
     supportsDebug: wordWolfSdkServerModule.manifest.supportsDebug,
@@ -65,6 +67,7 @@ const registrations: readonly ApprovedGameSdkRegistration[] = [
     moduleProfile: createInitialGameSdkModuleProfile(),
     settings: wordWolfSdkServerModule.manifest.settings ?? [],
     rules: (wordWolfSdkServerModule.manifest.rules ?? []).map((rule) => rule.ja),
+    ruleSections: wordWolfSdkServerModule.manifest.ruleSections,
     localePolicy: wordWolfSdkServerModule.manifest.localePolicy,
     createAdapter(resolveIdentity, request, playerId) {
       return createAuthenticatedGameSdkPlatformAdapter({

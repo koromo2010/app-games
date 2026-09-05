@@ -13,6 +13,7 @@ import { northernRules } from "@/lib/northern-branch-game";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 import { useGameplayActionWindow } from "@/app/hooks/use-gameplay-action-window";
+import { useBuiltInGameRulesPresentation } from "@/app/hooks/use-game-rules-presentation";
 import type {
   NorthernGameAction,
   NorthernRoom,
@@ -60,7 +61,7 @@ export function useNorthernBranchController() {
   const [showChoices, setShowChoices] = useState(false);
   const [paymentSelection, setPaymentSelection] = useState<{ playerId: string; indexes: number[] }>({ playerId: "", indexes: [] });
   const [isSaving, setIsSaving] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useBuiltInGameRulesPresentation("northern-branch");
   const timeoutExpiryKeyRef = useRef("");
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "finished", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
 

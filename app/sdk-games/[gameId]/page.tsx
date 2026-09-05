@@ -6,6 +6,7 @@ import { PlayerAuthGate } from "@/app/components/PlayerAuthGate";
 import { loadApprovedGameSdkRuntimeRegistration } from "@/lib/game-sdk-runtime-catalog";
 import { getAuthenticatedPlayer } from "@/lib/player-auth";
 import { playerVisibleGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
+import { getSdkGameRules } from "@/lib/game-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,12 @@ export default async function ApprovedSdkGamePage({
       requestedRevision || undefined,
     );
   if (!registration) notFound();
+  const ruleSet = getSdkGameRules({
+    gameId: registration.id,
+    revision: registration.revision,
+    locale: "ja",
+    ruleSections: registration.ruleSections,
+  });
   if (!(await getAuthenticatedPlayer())) {
     return <PlayerAuthGate title={registration.title} />;
   }
@@ -54,6 +61,7 @@ export default async function ApprovedSdkGamePage({
         title={registration.title}
         settingDefinitions={registration.settings}
         rules={registration.rules}
+        ruleSet={ruleSet}
         moduleProfile={playerVisibleGameSdkModuleProfile(registration.moduleProfile)}
         supportsReplay={registration.supportsReplay}
         supportsSpectators={registration.supportsSpectators}
@@ -68,6 +76,7 @@ export default async function ApprovedSdkGamePage({
       title={registration.title}
       settingDefinitions={registration.settings}
       rules={registration.rules}
+      ruleSet={ruleSet}
     />
   );
 }

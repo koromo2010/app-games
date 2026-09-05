@@ -12,11 +12,13 @@ import type {
   PackageRoom,
   SafeCommand,
 } from "./game-sdk-frame-types";
+import type { BoundGameRules } from "@/lib/game-rules";
 
 type Props = {
   eyebrow: string;
   title: string;
   rules: readonly string[];
+  ruleSet: BoundGameRules | null;
   backHref: string;
   backLabel: string;
   surface: GameSdkShellSurface;
@@ -58,6 +60,7 @@ export const GameSdkDebugPanel = memo(function GameSdkDebugPanel({
   eyebrow,
   title,
   rules,
+  ruleSet,
   backHref,
   backLabel,
   surface,
@@ -107,6 +110,7 @@ export const GameSdkDebugPanel = memo(function GameSdkDebugPanel({
       eyebrow={eyebrow}
       title={title}
       rules={rules}
+      ruleSet={ruleSet}
       backHref={backHref}
       backLabel={backLabel}
       surface={surface}

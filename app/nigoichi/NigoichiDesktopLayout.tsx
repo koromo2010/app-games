@@ -78,7 +78,7 @@ export function NigoichiDesktopLayout({ controller }: { controller: NigoichiCont
     submitAssociations, submitSelectedGuess, returnToRoom,
   } = actions;
 
-  const rulesDialog = <GameRulesDialog open={rulesOpen} title="ワードアウトのルール" onClose={() => setRulesOpen(false)}>
+  const rulesDialog = <GameRulesDialog open={rulesOpen} title="ワードアウトのルール" onClose={() => setRulesOpen(false)} gameId="nigoichi">
     <p>全員の連想語を手がかりにして、「誰にも配られていない1枚」を見つけるゲームです。自分のカードをうまく伝えながら、余ったことばを探します。</p>
     <h3 className="mt-4 font-black text-white">ゲームの準備</h3>
     <div className="mt-2 space-y-2 text-slate-300">

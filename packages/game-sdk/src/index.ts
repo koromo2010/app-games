@@ -8,6 +8,9 @@ export type GameSdkLocalePolicy = Readonly<{
   defaultContentLanguage?: GameSdkLocale;
 }>;
 export type GameSdkPlayMode = "online-room" | "local-pass-and-play";
+export const GAME_SDK_RULE_SECTION_KEYS = ["summary", "playerActions", "winCondition", "detailedRules", "playExample"] as const;
+export type GameSdkRuleSectionKey = typeof GAME_SDK_RULE_SECTION_KEYS[number];
+export type GameSdkRuleSections = Readonly<Record<GameSdkRuleSectionKey, Readonly<Record<GameSdkLocale, string>>>>;
 export type GameSdkPhase = "entry" | "lobby" | "playing" | "result";
 export type GameSdkViewerRole = "host" | "player" | "spectator" | "anonymous";
 
@@ -371,6 +374,8 @@ export type GameSdkManifest = {
   usesLlm: boolean;
   settings?: readonly GameSdkSettingDefinition[];
   rules?: readonly Readonly<Record<GameSdkLocale, string>>[];
+  /** Structured, player-visible rules for this exact accepted package revision. */
+  ruleSections?: GameSdkRuleSections;
   /**
    * Optional for legacy packages. Missing policy remains loadable but is not
    * evidence of cross-locale Room eligibility.
@@ -622,6 +627,16 @@ export function assertGameManifest(manifest: GameSdkManifest): void {
           || rule[locale].length > 300
         ) {
           throw new Error(`Game SDK manifest rules[${index}].${locale} is invalid.`);
+        }
+      }
+    }
+  }
+  if (manifest.ruleSections) {
+    for (const section of GAME_SDK_RULE_SECTION_KEYS) {
+      for (const locale of ["ja", "en"] satisfies GameSdkLocale[]) {
+        const text = manifest.ruleSections[section]?.[locale];
+        if (typeof text !== "string" || !text.trim() || text.length > 4000) {
+          throw new Error(`Game SDK manifest ruleSections.${section}.${locale} is invalid.`);
         }
       }
     }

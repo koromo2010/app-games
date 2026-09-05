@@ -25,6 +25,8 @@ import type {
 } from "./game-sdk-frame-types";
 import type { GameSdkPackageRevisionIssue } from "@/lib/game-sdk-package-revision";
 import { CommonRoomChatMount } from "@/app/components/room-chat/CommonRoomChatMount";
+import { GameRulesDisclosure } from "@/app/components/GameRulePresentation";
+import { bindGameRules, type BoundGameRules } from "@/lib/game-rules";
 
 export type GameSdkFrameViewProps = {
   // top level
@@ -37,6 +39,7 @@ export type GameSdkFrameViewProps = {
   packageRevision: string;
   previewOnly: boolean;
   rules: readonly string[];
+  ruleSet: BoundGameRules | null;
   room: PackageRoom | null;
   roomRef: MutableRefObject<PackageRoom | null>;
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -126,6 +129,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
     packageRevision,
     previewOnly,
     rules,
+    ruleSet,
     room,
     roomRef,
     iframeRef,
@@ -217,6 +221,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
           eyebrow="SDK PACKAGE PREVIEW"
           title={title}
           rules={rules}
+          ruleSet={ruleSet}
           backHref={backHref}
           backLabel="制作環境へ戻る"
           surface="lounge"
@@ -272,6 +277,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
           eyebrow="SDK PACKAGE"
           title={title}
           rules={rules}
+          ruleSet={ruleSet}
           backHref={backHref}
           backLabel={creatorSlug ? "制作環境へ戻る" : "広場へ戻る"}
           surface="lounge"
@@ -288,6 +294,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
           </section>
         ) : (
         <section className="mx-auto grid w-full gap-5 lg:grid-cols-2">
+          <GameRulesDisclosure ruleSet={ruleSet} surface="creation" />
           <div className={panel}>
             <h2 className="text-xl font-black">正式Roomで確認</h2>
             <p className="mt-2 text-sm text-slate-600">
@@ -381,6 +388,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
           : `ROOM ${room.code} · rev ${room.revision}`}
         title={title}
         rules={rules}
+        ruleSet={bindGameRules(ruleSet, room.packageRevision ?? packageRevision)}
         backHref={backHref}
         backLabel={creatorSlug ? "制作環境へ戻る" : "広場へ戻る"}
         surface={
@@ -408,7 +416,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
         onToggleAutoFollow={onToggleAutoFollow}
         onSelectActor={onSelectActor}
         onSelectViewer={onSelectViewer}
-      >
+        >
         {!creatorSlug
           && supportsSpectators
           && moduleRequired("spectators")
@@ -439,6 +447,10 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
         <aside className={`space-y-4 ${
           room.phase === "result" ? "order-2 lg:order-1" : "order-1"
         }`}>
+          <GameRulesDisclosure
+            ruleSet={bindGameRules(ruleSet, room.packageRevision ?? packageRevision)}
+            surface="lobby"
+          />
           <div className={panel}>
             <h2 className="text-lg font-black">
               {room.phase === "lobby" ? "ゲーム開始前" : room.phase === "result" ? "結果" : "プレイ中"}

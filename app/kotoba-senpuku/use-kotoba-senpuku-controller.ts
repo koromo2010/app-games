@@ -12,6 +12,7 @@ import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 import { useGameplayActionWindow } from "@/app/hooks/use-gameplay-action-window";
 import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
+import { useBuiltInGameRulesPresentation } from "@/app/hooks/use-game-rules-presentation";
 import {
   kotobaSenpukuKanaKey,
   isValidKotobaSenpukuWord,
@@ -80,7 +81,7 @@ export function useKotobaSenpukuController() {
   const [challengeGuess, setChallengeGuess] = useState("");
   const timeoutTextSubmissionKeyRef = useRef("");
   const [isSaving, setIsSaving] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useBuiltInGameRulesPresentation("kotoba-senpuku");
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
 
   const roomCode = room?.code;

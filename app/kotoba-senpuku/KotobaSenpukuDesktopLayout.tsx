@@ -115,7 +115,7 @@ export function KotobaSenpukuDesktopLayout({ controller }: { controller: KotobaS
     updateConfig, submitSecret, challengeWord, returnToRoom,
   } = actions;
 
-  const rulesDialog = <GameRulesDialog open={rulesOpen} title="ワードソナーのルール" onClose={() => setRulesOpen(false)}>
+  const rulesDialog = <GameRulesDialog open={rulesOpen} title="ワードソナーのルール" onClose={() => setRulesOpen(false)} gameId="kotoba-senpuku">
     <p>ほかの人の「秘密のことば」を文字から探しながら、自分のことばは最後まで隠すゲームです。むずかしい知識は必要ありません。文字を当てて、少しずつ答えに近づきます。</p>
     <h3 className="mt-4 font-black text-white">ゲームの準備</h3>
     <ol className="mt-2 list-decimal space-y-2 pl-5">

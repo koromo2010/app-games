@@ -15,6 +15,7 @@ import { useWordWolfPlayerProfile } from "./use-wordwolf-player-profile";
 import { useWordWolfViewModel } from "./use-wordwolf-view-model";
 import { useWordWolfRoomSession } from "./use-wordwolf-room-session";
 import { createWordWolfViewPermissions } from "./wordwolf-view-permissions";
+import { useBuiltInGameRulesPresentation } from "../hooks/use-game-rules-presentation";
 
 export function useWordWolfController() {
   const [room, setRoom] = useState<Room | null>(null);
@@ -38,7 +39,7 @@ export function useWordWolfController() {
   const [isVoteSubmitting, setIsVoteSubmitting] = useState(false);
   const [isGuessFeedbackSaving, setIsGuessFeedbackSaving] = useState(false);
   const [isRoomLifecyclePending, setIsRoomLifecyclePending] = useState(false);
-  const [isRulesOpen, setIsRulesOpen] = useState(false);
+  const [isRulesOpen, setIsRulesOpen] = useBuiltInGameRulesPresentation("wordwolf");
   const [isMyPageOpen, setIsMyPageOpen] = useState(false);
   const roomActionQueueRef = useRef<Promise<void>>(Promise.resolve());
 
