@@ -1,3 +1,4 @@
+import { isCompletionEvidence, type CompletionEvidence } from "./production-private-workspace-completion-evidence-contract.ts";
 import {
   isDiagnosticFailureCode,
   type ProductionOwnerRestorationDiagnosticFailureCode,
@@ -6,6 +7,7 @@ import {
 type DiagnosticStatus = "pass" | "fail" | "not-assessed";
 
 export type CompletionDiagnostic = {
+  completionEvidence?: CompletionEvidence;
   schemaVersion: 1;
   operationId: "06eb6940-fd24-59b0-8d00-47eba9a9ce8c";
   database: { canonicalReaderSelector: string; diagnosticSelector: string; selectorMatch: boolean; canonicalReaderFingerprint: string | null; diagnosticFingerprint: string | null; fingerprintMatch: boolean };
@@ -46,7 +48,8 @@ function statusValues(value: Record<string, unknown> | null, keys: string[]) {
 
 export function parseCompletionDiagnostic(value: unknown): CompletionDiagnostic | null {
   const payload = object(value);
-  if (!payload || !exactKeys(payload, ["schemaVersion", "operationId", "database", "schema", "tables", "operation", "workspace", "integrity", "nonEffects", "canonicalReader"])) return null;
+  if (!payload || !exactKeys(payload, ["schemaVersion", "operationId", "database", "schema", "tables", "operation", "workspace", "integrity", "nonEffects", "canonicalReader", ...(payload.completionEvidence === undefined ? [] : ["completionEvidence"])])) return null;
+  if (payload.completionEvidence !== undefined && !isCompletionEvidence(payload.completionEvidence)) return null;
   const database = record(payload.database, ["canonicalReaderSelector", "diagnosticSelector", "selectorMatch", "canonicalReaderFingerprint", "diagnosticFingerprint", "fingerprintMatch"]);
   const schema = record(payload.schema, ["version", "evidence", "metadata"]);
   const tables = record(payload.tables, ["operations", "workspaces", "games", "files"]);

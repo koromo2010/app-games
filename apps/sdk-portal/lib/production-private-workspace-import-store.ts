@@ -1,3 +1,5 @@
+import { projectCompletionEvidence } from "./production-private-workspace-completion-evidence.ts";
+import type { CompletionEvidence } from "../../../lib/production-private-workspace-completion-evidence-contract.ts";
 import {
   ProductionPrivateWorkspaceImportError,
   productionPrivateWorkspaceImportIntent,
@@ -318,6 +320,7 @@ type DiagnosticOperationState = "completed" | "pending" | "other" | "ambiguous" 
 type DiagnosticOperationPhase = "imported-private" | "ledger-recorded" | "other" | "ambiguous" | "not-assessed";
 
 export type ProductionPrivateWorkspaceImportCompletionDiagnostic = {
+  completionEvidence?: CompletionEvidence;
   schemaVersion: 1;
   operationId: string;
   database: {
@@ -496,7 +499,16 @@ const productionPrivateWorkspaceImportDiagnosticSelect = `
     COALESCE((SELECT bool_and(publications_created = 0) FROM workspace_rows), FALSE) AS "publications0",
     COALESCE((SELECT bool_and(aliases_created = 0) FROM workspace_rows), FALSE) AS "aliases0",
     COALESCE((SELECT bool_and(rooms_created = 0) FROM workspace_rows), FALSE) AS "rooms0",
-    (SELECT COUNT(*) = 1 FROM canonical_reader_rows) AS "canonicalReaderMatched"
+    (SELECT COUNT(*) = 1 FROM canonical_reader_rows) AS "canonicalReaderMatched",
+    jsonb_build_object(
+      'operations', COALESCE((SELECT jsonb_agg(to_jsonb(o) ORDER BY operation_id) FROM operation_rows o), '[]'::jsonb),
+      'workspaces', COALESCE((SELECT jsonb_agg(to_jsonb(w) ORDER BY workspace_id)
+        FROM sdk_production_private_workspaces w WHERE operation_id = $1::UUID), '[]'::jsonb),
+      'games', COALESCE((SELECT jsonb_agg(to_jsonb(g) ORDER BY workspace_id, game_id) FROM game_rows g), '[]'::jsonb),
+      'files', COALESCE((SELECT jsonb_agg((to_jsonb(f) - 'content_bytes') || jsonb_build_object(
+        'actual_bytes', octet_length(content_bytes), 'actual_sha256', encode(sha256(content_bytes), 'hex'))
+        ORDER BY workspace_id, game_id, path) FROM file_rows f), '[]'::jsonb)
+    ) AS "completionEvidenceSnapshot"
 `;
 
 /**
@@ -596,7 +608,8 @@ export function projectCompletedProductionPrivateWorkspaceImportDiagnostic(input
   if (Object.values(integrity).some((value) => value !== "pass")) excludedBy.push("INTEGRITY");
   if (Object.values(nonEffects).some((value) => value !== "pass")) excludedBy.push("NON_EFFECTS");
   const matched = all(row, "canonicalReaderMatched") && excludedBy.length === 0;
-  return { schemaVersion: 1, operationId, database, schema, tables, operation, workspace, integrity, nonEffects, canonicalReader: { matched, excludedBy } };
+  return { schemaVersion: 1, operationId, database, schema, tables, operation, workspace, integrity, nonEffects, canonicalReader: { matched, excludedBy },
+    ...(row.completionEvidenceSnapshot === undefined ? {} : { completionEvidence: projectCompletionEvidence(row.completionEvidenceSnapshot) }) };
 }
 
 /**
@@ -650,6 +663,7 @@ export async function diagnoseCompletedProductionPrivateWorkspaceImport(
       throw new ProductionPrivateWorkspaceImportMetadataResponseError();
     }
     row = (rows[0] as Record<string, unknown> | undefined) ?? {};
+    if (!("completionEvidenceSnapshot" in row)) throw new ProductionPrivateWorkspaceImportMetadataResponseError();
   } catch (error) {
     if (error instanceof ProductionPrivateWorkspaceImportMetadataResponseError) {
       throw new ProductionOwnerRestorationDiagnosticError(

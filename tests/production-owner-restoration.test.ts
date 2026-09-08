@@ -148,6 +148,9 @@ function diagnosticContext(responses: Array<unknown>) {
       async query() {
         const response = responses.shift();
         if (response && typeof response === "object" && "error" in response) throw (response as { error: unknown }).error;
+        if (Array.isArray(response) && response[0] === canonicalDiagnosticRow) {
+          return [{...canonicalDiagnosticRow, completionEvidenceSnapshot:{operations:[],workspaces:[],games:[],files:[]}}];
+        }
         return response;
       },
     },
@@ -297,7 +300,8 @@ test("completed-import diagnosis remains canonical when metadata permission is u
   assert.equal(diagnostic.schema.metadata, "permission-unavailable");
   assert.equal(diagnostic.schema.evidence, "canonical-query-confirmed");
   assert.equal(diagnostic.canonicalReader.matched, true);
-  assert.doesNotMatch(JSON.stringify(diagnostic), /host|token|credential/i);
+  // A closed broadTokenHistory enum is safe; actual stored token fields must never escape.
+  assert.doesNotMatch(JSON.stringify(diagnostic), /host|credential|sourceStateToken|publicStateToken|unrelatedPrivateStateToken|source_state_token|public_state_token|unrelated_private_state_token/i);
 });
 
 test("completed-import diagnosis fails closed for malformed metadata and selector mismatch", async () => {
