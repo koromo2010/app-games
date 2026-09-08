@@ -65,6 +65,7 @@
         "ws": "^8.21.1"
     },
     "devDependencies": {
+        "@electric-sql/pglite": "0.5.8",
         "@tailwindcss/postcss": "^4",
         "@types/node": "^20",
         "@types/react": "^19",
@@ -73,6 +74,7 @@
         "esbuild": "^0.28.1",
         "eslint": "^9",
         "eslint-config-next": "16.2.4",
+        "linkedom": "0.18.13",
         "tailwindcss": "^4",
         "typescript": "^5"
     }

@@ -275,7 +275,7 @@ const completedProductionPrivateWorkspaceImportSelect = `
       AND o.target_key = 'moi-lab2'
       AND o.operation_nonce = o.operation_id
       AND o.environment = 'production'
-      AND o.intent = ${productionPrivateWorkspaceImportIntent}
+      AND o.intent = $2
       AND o.state = 'completed' AND o.phase = 'imported-private'
       AND o.terminal_receipt IS NOT NULL AND o.read_back_sha256 IS NOT NULL
       AND w.workspace_id = o.operation_id AND w.target_key = o.target_key
@@ -304,7 +304,7 @@ export async function readCompletedProductionPrivateWorkspaceImport(
   operationId: string,
 ): Promise<CompletedProductionPrivateWorkspaceImport | null> {
   const { sql } = sdkRuntimeSqlContext();
-  const rows = await sql.query(completedProductionPrivateWorkspaceImportSelect, [operationId]) as CompletedRow[];
+  const rows = await sql.query(completedProductionPrivateWorkspaceImportSelect, [operationId, productionPrivateWorkspaceImportIntent]) as CompletedRow[];
   const row = rows[0];
   if (!row) return null;
   return {
@@ -503,10 +503,10 @@ const productionPrivateWorkspaceImportDiagnosticSelect = `
   )
   SELECT
     (SELECT COUNT(*) FROM operation_rows)::INTEGER AS "operationRows",
-    COALESCE((SELECT bool_and(operation_id::TEXT = $1) FROM operation_rows), FALSE) AS "operationIdExact",
+    COALESCE((SELECT bool_and(operation_id = $1::UUID) FROM operation_rows), FALSE) AS "operationIdExact",
     COALESCE((SELECT bool_and(operation_nonce = operation_id) FROM operation_rows), FALSE) AS "nonceExact",
     COALESCE((SELECT bool_and(environment = 'production') FROM operation_rows), FALSE) AS "operationEnvironmentExact",
-    COALESCE((SELECT bool_and(intent = '${productionPrivateWorkspaceImportIntent}') FROM operation_rows), FALSE) AS "intentExact",
+    COALESCE((SELECT bool_and(intent = $2) FROM operation_rows), FALSE) AS "intentExact",
     COALESCE((SELECT bool_and(state = 'completed') FROM operation_rows), FALSE) AS "operationStateCompleted",
     COALESCE((SELECT bool_and(state = 'pending') FROM operation_rows), FALSE) AS "operationStatePending",
     COALESCE((SELECT bool_and(phase = 'imported-private') FROM operation_rows), FALSE) AS "operationPhaseImported",
@@ -658,7 +658,7 @@ export async function diagnoseCompletedProductionPrivateWorkspaceImport(
   }
 
   try {
-    const canonicalRows = await context.sql.query(completedProductionPrivateWorkspaceImportSelect, [operationId]);
+    const canonicalRows = await context.sql.query(completedProductionPrivateWorkspaceImportSelect, [operationId, productionPrivateWorkspaceImportIntent]);
     if (!Array.isArray(canonicalRows) || canonicalRows.some((row) => !row || typeof row !== "object" || Array.isArray(row))) {
       throw new ProductionPrivateWorkspaceImportMetadataResponseError();
     }
@@ -687,7 +687,7 @@ export async function diagnoseCompletedProductionPrivateWorkspaceImport(
 
   let row: Record<string, unknown>;
   try {
-    const rows = await context.sql.query(productionPrivateWorkspaceImportDiagnosticSelect, [operationId]);
+    const rows = await context.sql.query(productionPrivateWorkspaceImportDiagnosticSelect, [operationId, productionPrivateWorkspaceImportIntent]);
     if (!Array.isArray(rows) || rows.some((value) => !value || typeof value !== "object" || Array.isArray(value))) {
       throw new ProductionPrivateWorkspaceImportMetadataResponseError();
     }

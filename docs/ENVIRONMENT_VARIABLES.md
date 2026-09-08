@@ -31,6 +31,15 @@
 
 `npm run check:env-ledger`は、リポジトリ内の静的な`process.env.KEY`参照を抽出し、この台帳にキー名が存在するか検査する。さらに、`config/environment-change-registry.json`の各依頼について、対象Project、branch、Environment、Sensitive、操作、状態、再デプロイ要否、一時変数区分とMarkdown台帳へのキー記載を検査する。新しい環境変数をコードへ追加したのに台帳を更新していない場合や、設定依頼の機械可読情報が欠ける場合は`npm run lint`も失敗する。Vercel上の実値や実際の配置は利用者がcontrol planeで確認し、AIは返却された画面情報・値・証拠に基づいて台帳を更新する。
 
+### completed-import隔離PostgreSQLテスト専用
+
+次の2キーは`tests/production-private-workspace-postgres.test.ts`だけが使用するローカル検証オプションであり、Vercelや実サービスには登録しない。DB接続文字列は受け取らず、PGliteのPostgreSQLエンジンと合成データだけを使用する。
+
+| キー | 用途 |
+| --- | --- |
+| `T131_A6_BASE_STORE` | exact baseのGit objectから取得した`production-private-workspace-import-store.ts`のローカルpath。SQLを書き換えずに修正前の失敗比較を実行する。未指定時は修正前比較だけSKIPし、候補のDB・API・表示検証は実行する |
+| `T131_A6_SQL_EVIDENCE` | 製品生成SQL・合成引数・SQLSTATE・API結果の新規JSON保存先。既存pathは上書きしない。未指定時はファイルを作らない |
+
 ### その他のコード参照キー（配置監査待ち）
 
 以下はコードから参照されるが、Project別の現在配置をまだ監査できていないキーである。System Variableを除き、利用機能を実機確認する前に対象Project、Environment、Sensitive区分を確定する。

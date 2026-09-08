@@ -25,6 +25,13 @@ import {
   diagnosticQueryFailureCode,
   productionOwnerRestorationDiagnosticFailureCodes,
 } from "../lib/production-owner-restoration-diagnostic.ts";
+import {
+  initialCompletionDiagnosticProjection,
+  parseCompletionDiagnostic,
+  projectCompletionDiagnosticResponse,
+  projectCompletionDiagnosticTransportFailure,
+  startCompletionDiagnosticProjection,
+} from "../lib/production-owner-restoration-diagnostic-projection.ts";
 
 const secret = "t131-a6-owner-restoration-test-secret-value";
 
@@ -122,7 +129,7 @@ function completedImportDiagnostic(overrides: Record<string, unknown> = {}, tabl
     operationId: productionOwnerRestorationWorkspaceOperationId,
     tablePresence: tables,
     databaseContext: {
-      selectedKey: "SDK_DATABASE_URL",
+      selectedKey: "SDK_DATABASE_URL" as const,
       fallbackUsed: false,
       databaseTargetFingerprint: "t".repeat(64),
       databaseNameFingerprint: "n".repeat(64),
@@ -176,6 +183,35 @@ test("completed-import diagnostic accepts only the complete canonical A5 contrac
   assert.equal(diagnostic.database.selectorMatch, true);
   assert.equal(diagnostic.database.fingerprintMatch, true);
   assert.doesNotMatch(JSON.stringify(diagnostic), /databaseUrl|host|username|token|cookie|content_bytes|credential/i);
+});
+
+test("diagnostic UI projection accepts the SDK schema and retains a result independently of consumption", () => {
+  const payload = completedImportDiagnostic();
+  assert.ok(parseCompletionDiagnostic(payload));
+  const pending = startCompletionDiagnosticProjection(initialCompletionDiagnosticProjection);
+  assert.deepEqual(pending, { consumed: true, phase: "pending" });
+  const result = projectCompletionDiagnosticResponse(200, payload);
+  assert.equal(result.consumed, true);
+  assert.equal(result.phase, "result");
+  assert.equal(result.phase === "result" && result.httpStatus, 200);
+  assert.equal(result.phase === "result" && result.diagnostic.schema.metadata, "confirmed");
+  assert.deepEqual(startCompletionDiagnosticProjection(result), result);
+});
+
+test("diagnostic UI projection fail-closes unknown, empty, malformed, HTTP, and transport responses", () => {
+  for (const payload of [{ unknown: true }, null, { schemaVersion: 1 }]) {
+    const result = projectCompletionDiagnosticResponse(200, payload);
+    assert.deepEqual(result, { consumed: true, phase: "failure", httpStatus: 200, code: "OWNER_RESTORATION_DIAGNOSTIC_UPSTREAM_RESPONSE_INVALID" });
+  }
+  assert.deepEqual(projectCompletionDiagnosticResponse(503, { error: "not-allowlisted" }), {
+    consumed: true, phase: "failure", httpStatus: 503, code: "OWNER_RESTORATION_DIAGNOSTIC_UPSTREAM_UNAVAILABLE",
+  });
+  assert.deepEqual(projectCompletionDiagnosticResponse(503, { error: "OWNER_RESTORATION_DIAGNOSTIC_REQUIRED_TABLE_UNAVAILABLE" }), {
+    consumed: true, phase: "failure", httpStatus: 503, code: "OWNER_RESTORATION_DIAGNOSTIC_REQUIRED_TABLE_UNAVAILABLE",
+  });
+  assert.deepEqual(projectCompletionDiagnosticTransportFailure(), {
+    consumed: true, phase: "failure", httpStatus: null, code: "OWNER_RESTORATION_DIAGNOSTIC_UPSTREAM_UNAVAILABLE",
+  });
 });
 
 test("completed-import diagnostic does not promote 1/2/21 pending or ledger-recorded operations", () => {
@@ -385,6 +421,7 @@ test("routes and UI are GET-only, exact-target, no-store, and contain no binding
   const store = readFileSync("apps/sdk-portal/lib/production-owner-restoration-store.ts", "utf8");
   const accountStore = readFileSync("lib/player-owner-restoration-admin-store.ts", "utf8");
   const diagnosticErrors = readFileSync("lib/production-owner-restoration-diagnostic.ts", "utf8");
+  const diagnosticProjection = readFileSync("lib/production-owner-restoration-diagnostic-projection.ts", "utf8");
   const panel = readFileSync("app/site-admin/runtime-operations/production-private-workspace-import/moi-lab2/ProductionOwnerRestorationPanel.tsx", "utf8");
   assert.match(accountRoute + planRoute + diagnosticRoute, /requireFullSiteAdminSession/);
   assert.match(accountRoute + planRoute + diagnosticRoute + internal + diagnosticInternal, /private, no-store/);
@@ -407,10 +444,14 @@ test("routes and UI are GET-only, exact-target, no-store, and contain no binding
   ]) assert.match(planRoute + panel, new RegExp(code));
   assert.doesNotMatch(panel, /moi2|moiwai/);
   for (const code of productionOwnerRestorationDiagnosticFailureCodes) {
-    assert.match(diagnosticRoute + diagnosticInternal + panel + diagnosticErrors, new RegExp(code));
+    assert.match(diagnosticRoute + diagnosticInternal + panel + diagnosticErrors + diagnosticProjection, new RegExp(code));
   }
   assert.match(diagnosticRoute + diagnosticInternal, /OWNER_RESTORATION_DIAGNOSTIC_UNAVAILABLE/);
   assert.doesNotMatch(diagnosticRoute + diagnosticInternal, /ensure(?:Sdk|Postgres)Schema|\b(?:INSERT|UPDATE|DELETE)\b/i);
+  assert.match(panel, /diagnosticState\.consumed/);
+  assert.match(panel, /diagnosticRequestInFlight/);
+  assert.match(panel, /data-completed-import-diagnostic-failure/);
+  assert.doesNotMatch(diagnosticProjection, /fetch\(|POST|PUT|PATCH|DELETE/);
 });
 
 test("owner restoration locks the completed A5 workspace operation, not the pre-import A3 recovery identity", () => {
