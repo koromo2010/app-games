@@ -177,8 +177,8 @@ export function ProductionOwnerRestorationPanel() {
     </div>}
     <button type="button" onClick={() => void readDiagnostic()} disabled={diagnosticState.consumed} className="mt-4 w-full rounded-xl border border-violet-200/40 px-4 py-3 font-black disabled:opacity-40">canonical completed-import diagnosticを1回確認</button>
     {diagnosticState.phase === "pending" && <p className="mt-4 rounded-xl border border-sky-300/30 bg-sky-300/10 p-4 text-sm" data-completed-import-diagnostic-pending>completed-import diagnosticを安全に確認しています。</p>}
-    {(diagnosticState.phase === "result" || diagnosticState.phase === "failure") && <p className="mt-2 text-sm" data-completed-import-diagnostic-http>
-      HTTP {diagnosticState.httpStatus ?? "応答未確認"} / 診断送信済み（再送不可）
+    {diagnosticState.consumed && <p className="mt-2 text-sm" data-completed-import-diagnostic-http data-completed-import-diagnostic-consumed>
+      HTTP {diagnosticState.phase === "pending" ? "未確定" : diagnosticState.httpStatus ?? "応答未確認"} / 診断送信済み（再送不可）
     </p>}
     {diagnostic && <div className="mt-4 rounded-xl border border-sky-300/30 bg-sky-300/10 p-4 text-sm" data-completed-import-diagnostic>
       <p className="font-black">COMPLETED-IMPORT DIAGNOSTIC</p>
@@ -188,6 +188,13 @@ export function ProductionOwnerRestorationPanel() {
       <p className="mt-2">bundle {diagnostic.integrity.bundleMatch} / manifest {diagnostic.integrity.manifestMatch} / ledger {diagnostic.integrity.ledgerMatch}</p>
       <p className="mt-2">games 2 {diagnostic.integrity.games2} / runtime files 21 {diagnostic.integrity.runtimeFiles21} / non-effects grants {diagnostic.nonEffects.grants0} release {diagnostic.nonEffects.releases0} publication {diagnostic.nonEffects.publications0}</p>
       <p className="mt-2 break-all font-mono text-xs">database selector match {String(diagnostic.database.selectorMatch)} / fingerprint match {String(diagnostic.database.fingerprintMatch)}</p>
+    </div>}
+    {diagnostic?.completionEvidence && <div className="mt-4 break-all rounded-xl border border-sky-300/30 p-4 text-sm" data-completed-import-completion-evidence>
+      <p className="font-black">完了記録の照合資料（修復可否は未判定）</p>
+      <p>同一SQL snapshot / receipt {diagnostic.completionEvidence.terminalReceiptState} / read-back SHA {diagnostic.completionEvidence.readBackShaState} / completed_at {diagnostic.completionEvidence.completedAtState}</p>
+      <p>DB内plan整合 {diagnostic.completionEvidence.planSelfConsistency} / 実file hash {diagnostic.completionEvidence.fileContentHashes} / game-file集合 {diagnostic.completionEvidence.gameFileSets} / provenance {diagnostic.completionEvidence.gameProvenance}</p>
+      <p>原本bundle・元plan・before-stateとの一致、広域tokenの履歴は未照合です。</p>
+      <details className="mt-2"><summary>offline照合用の安全なJSON</summary><pre className="whitespace-pre-wrap text-xs">{JSON.stringify(diagnostic.completionEvidence, null, 2)}</pre></details>
     </div>}
     {diagnosticState.phase === "failure" && <p role="alert" className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm" data-completed-import-diagnostic-failure>completed-import diagnostic fail-closed: {diagnosticState.code}</p>}
     <button type="button" onClick={() => void readPlan()} disabled={planLocked} className="mt-4 w-full rounded-xl bg-violet-300 px-4 py-3 font-black text-slate-950 disabled:opacity-40">owner bindingのwrite-free planを1回確認</button>

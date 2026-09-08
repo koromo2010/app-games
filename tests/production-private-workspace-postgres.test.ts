@@ -1,3 +1,6 @@
+import { compareOriginalCompletionEvidence } from "../scripts/t131-a6-compare-completion-evidence.ts";
+import { completionEvidenceDigest as digest, originalCompletionEntityDigest } from "../apps/sdk-portal/lib/production-private-workspace-completion-evidence.ts";
+import type { ValidatedProductionPrivateWorkspaceBundle, ProductionPrivateWorkspaceImportBeforeState } from "../apps/sdk-portal/lib/production-private-workspace-import.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -24,6 +27,7 @@ const names = productionPrivateWorkspaceImportObjectNames;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 type QueryEvidence = { statement: string; params: unknown[]; rows?: number; sqlstate?: string };
 type Harness = {
+  testPlan(bundle: ValidatedProductionPrivateWorkspaceBundle, before: ProductionPrivateWorkspaceImportBeforeState): {planReceipt:string; beforeStateSha256:string};
   setSql(sql: { query(statement: string, params?: unknown[]): Promise<unknown> }): void;
   setAdmin(allowed: boolean): void;
   readCompletedProductionPrivateWorkspaceImport(id: string): Promise<unknown>;
@@ -42,6 +46,7 @@ async function harness(baseStore?: string): Promise<Harness> {
     stdin: {
       contents: `export * from './${storePath}';
         export {setSql} from '@neondatabase/serverless';
+        export {planFrom as testPlan} from './apps/sdk-portal/lib/production-private-workspace-import.ts';
         export {setAdmin} from './lib/site-admin-auth.ts';
         export {GET as adminGET} from './app${adminPath}/route.ts';
         export {GET as sdkGET} from './apps/sdk-portal/app${sdkPath}/route.ts';
@@ -65,6 +70,9 @@ async function harness(baseStore?: string): Promise<Harness> {
         const absolute = resolve(root, importer.includes("/apps/sdk-portal/") ? "apps/sdk-portal" : ".", path.slice(2));
         return { path: [absolute, `${absolute}.ts`, `${absolute}.tsx`].find(existsSync)! };
       });
+      builder.onLoad({ filter: /\/production-private-workspace-import\.ts$/ }, ({path}) => ({
+        contents: readFileSync(path,"utf8") + "\nexport {planFrom};", loader:"ts", resolveDir:resolve(path,".."),
+      }));
       if (baseStore) builder.onLoad({ filter: /\/production-private-workspace-import-store\.ts$/ }, ({ path }) => ({
         contents: readFileSync(baseStore, "utf8"), loader: "ts", resolveDir: resolve(path, ".."),
       }));
@@ -186,12 +194,15 @@ test("completed-import SQL and API/decoder/UI run on isolated PostgreSQL (PGlite
       assert.equal(uiCalls, before + 1);
       assert.equal(button.hasAttribute("disabled"), true);
       assert.ok(container.querySelector("[data-completed-import-diagnostic-pending]"));
+      assert.equal(container.querySelector("[data-completed-import-diagnostic-consumed]")?.textContent?.trim(), "HTTP 未確定 / 診断送信済み（再送不可）");
       await act(async () => { release(); await delay; });
       assert.ok(container.querySelector(expectedStatus === "result" ? "[data-completed-import-diagnostic]" : "[data-completed-import-diagnostic-failure]"));
       assert.match(container.textContent ?? "", new RegExp(expected));
       assert.equal(button.hasAttribute("disabled"), true);
+      assert.ok(container.querySelector("[data-completed-import-diagnostic-consumed]"));
       assert.equal(container.querySelector("[data-completed-import-diagnostic-pending]"), null);
       assert.equal(container.querySelector("[data-completed-import-diagnostic-http]")?.textContent?.trim(), `HTTP ${httpStatus} / 診断送信済み（再送不可）`);
+      assert.equal(container.querySelectorAll("[data-completed-import-diagnostic-consumed], [data-completed-import-diagnostic-http]").length, 1, "HTTP and consumption use one retained display");
       await act(async () => { button.dispatchEvent(new window.Event("click", { bubbles: true })); });
       assert.equal(uiCalls, before + 1, "consumed UI must not send again");
       outcomes.push({ display: expected, phase: expectedStatus, httpStatus, consumed: true, uiCalls: 1, retryCalls: 0 });
@@ -314,6 +325,87 @@ test("completed-import SQL and API/decoder/UI run on isolated PostgreSQL (PGlite
       assert.equal(diagnostic.canonicalReader.matched, false);
       assert.ok(diagnostic.canonicalReader.excludedBy.includes(mismatch.excluded));
       outcomes.push({ scenario: mismatch.name, diagnostic });
+    });
+
+    await t.test("completion evidence: read-only snapshot, original identity and actual content hashing", async () => {
+      await reset(db, true);
+      const creatorRowId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+      const games: ValidatedProductionPrivateWorkspaceBundle["games"] = [0,1].map(game => {
+        const runtimeFiles = Array.from({length:game === 0 ? 10 : 11}, (_,file) => ({path:`source/file-${file}.js`, bytes:1, sha256:hash("A"), content:Buffer.from("A")}));
+        runtimeFiles.sort((a,b)=>a.path.localeCompare(b.path));
+        const workspaceDocument = {provenance:{synthetic:true}, content:"original"};
+        return {gameId:`synthetic-${game}`, reconstructionMode:"DEFINITION_BACKED_SEMANTIC_REBUILD", originalRevision:null,
+          workspaceDocument, workspaceDocumentSha256:hash(`doc-${game}`), provenanceSha256:digest(workspaceDocument.provenance),
+          runtimeFilesSha256:digest(runtimeFiles.map(({path,bytes,sha256})=>({path,bytes,sha256}))), runtimeFiles};
+      });
+      const bundle: ValidatedProductionPrivateWorkspaceBundle = {target:"moi-lab2",environment:"production",schemaVersion:1,
+        bundleBytes:127345,bundleSha256:"71834a0633bb35cb3021c01a758db9f9005f148b790bab9c8b89fd3adb346305",gameCount:2,entryCount:26,runtimeFileCount:21,runtimeBytes:21,
+        gameIdentitySetSha256:hash("games"),perGameIdentitySha256:hash("per-game"),contentSetSha256:hash("content"),workspaceManifestSha256:hash("manifest"),perGameLedgerSha256:hash("ledger"),
+        creatorRowId,workspaceManifest:{creatorRowId},games};
+      const before: ProductionPrivateWorkspaceImportBeforeState = {targetCreatorRowId:creatorRowId,targetCreatorRows:1,targetDeletedCreatorRows:1,targetCreatorOwnerRows:0,
+        targetGameRows:2,targetDeletedGameRows:2,targetActiveGameRows:0,targetReleaseRows:0,targetCurrentReleaseRows:0,recoveryOperationRows:1,recoveryQuarantineGameRows:2,recoveryIdentityExact:true,
+        targetWorkspaceRows:0,targetWorkspaceGameRows:0,targetWorkspaceFileRows:0,sourceStateToken:hash("source"),publicStateToken:hash("public"),unrelatedPrivateStateToken:hash("unrelated")};
+      const plan = app.testPlan(bundle,before); // unchanged product plan generator, not a test-written hash formula
+      await db.query(`UPDATE ${names[0]} SET plan_receipt=$1,before_state_sha256=$2`,[plan.planReceipt,plan.beforeStateSha256]);
+      await db.query(`UPDATE ${names[1]} SET workspace_manifest=$1`,[JSON.stringify(bundle.workspaceManifest)]);
+      for (const g of games) await db.query(`UPDATE ${names[2]} SET workspace_document=$1,provenance_sha256=$2,runtime_files_sha256=$3 WHERE game_id=$4`,[JSON.stringify(g.workspaceDocument),g.provenanceSha256,g.runtimeFilesSha256,g.gameId]);
+      const originalDigest = originalCompletionEntityDigest(bundle,operationId);
+      await db.exec("BEGIN READ ONLY");
+      const start = queries.length;
+      const good = await response();
+      await db.exec("COMMIT");
+      assert.equal(good.status,200);
+      const e = good.body.completionEvidence;
+      assert.equal(e.snapshot,"single-statement");
+      assert.equal(e.terminalReceiptState,"absent"); assert.equal(e.readBackShaState,"absent"); assert.equal(e.completedAtState,"absent");
+      assert.equal(e.planSelfConsistency,"pass"); assert.equal(e.approvedBeforeStateSelfConsistency,"pass");
+      assert.equal(e.fileContentHashes,"pass"); assert.equal(e.gameFileSets,"pass"); assert.equal(e.gameProvenance,"pass");
+      assert.equal(e.originalComparableSha256,originalDigest);
+      assert.equal(e.originalBundleMatch,"not-assessed"); assert.equal(e.originalBeforeStateMatch,"not-assessed"); assert.equal(e.repairEligibility,"not-assessed");
+      const snapshotQueries = queries.slice(start).filter(q=>q.statement.includes('"completionEvidenceSnapshot"'));
+      assert.equal(snapshotQueries.length,1);
+      assert.match(snapshotQueries[0].statement,/canonical_reader_rows AS MATERIALIZED/);
+      assert.throws(() => compareOriginalCompletionEvidence({archive:new Uint8Array(),evidence:e}), /PRODUCTION_PRIVATE_IMPORT_/);
+      const encoded = JSON.stringify(e);
+      for (const forbidden of [creatorRowId,"source/file-0.js",hash("source"),'"workspace_document"','"content_bytes"']) assert.equal(encoded.includes(forbidden),false);
+      await display("receipt absent / read-back SHA absent / completed_at absent","result");
+      outcomes.push({scenario:"completion-evidence-original-match-synthetic",status:good.status,evidence:e,originalDigest,readOnlyTransaction:true});
+      for (const malformed of [{...e,unexpected:true},{...e,originalBundleMatch:"pass"},{...e,operationSnapshotSha256:"raw"},{...e,terminalReceiptState:"unknown"}]) {
+        assert.equal(projectCompletionDiagnosticResponse(200,{...good.body,completionEvidence:malformed}).phase,"failure");
+      }
+      // Same counts and bytes, actual content differs; no schema relaxation.
+      await db.exec(`UPDATE ${names[3]} SET content_bytes=decode('42','hex') WHERE game_id='synthetic-0' AND path='source/file-0.js'`);
+      const changed = await response();
+      assert.equal(changed.body.completionEvidence.fileContentHashes,"fail");
+      assert.notEqual(changed.body.completionEvidence.originalComparableSha256,originalDigest);
+      outcomes.push({scenario:"same-size-content-corruption",evidence:changed.body.completionEvidence});
+      // Coherently rewritten metadata still cannot pass original comparison.
+      await db.query(`UPDATE ${names[3]} SET content_sha256=$1 WHERE game_id='synthetic-0' AND path='source/file-0.js'`,[hash("B")]);
+      const rewritten = games[0].runtimeFiles.map(f=>({path:f.path,bytes:f.bytes,sha256:f.path === "source/file-0.js" ? hash("B") : f.sha256}));
+      await db.query(`UPDATE ${names[2]} SET runtime_files_sha256=$1 WHERE game_id='synthetic-0'`,[digest(rewritten)]);
+      const coherent = await response();
+      assert.equal(coherent.body.completionEvidence.fileContentHashes,"pass"); assert.equal(coherent.body.completionEvidence.gameFileSets,"pass");
+      assert.notEqual(coherent.body.completionEvidence.originalComparableSha256,originalDigest);
+      outcomes.push({scenario:"coherent-content-rewrite-not-original",evidence:coherent.body.completionEvidence});
+      await db.query(`UPDATE ${names[0]} SET plan_receipt=$1`,[hash("wrong-plan")]);
+      assert.equal((await response()).body.completionEvidence.planSelfConsistency,"fail");
+      await db.query(`UPDATE ${names[0]} SET before_state_sha256=$1`,[hash("wrong-before")]);
+      assert.equal((await response()).body.completionEvidence.approvedBeforeStateSelfConsistency,"fail");
+      await db.exec(`UPDATE ${names[1]} SET workspace_manifest='{"creatorRowId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","extra":true}'::jsonb`);
+      assert.notEqual((await response()).body.completionEvidence.originalComparableSha256,originalDigest);
+    });
+
+    await t.test("completion evidence distinguishes malformed receipts from presence and rejects absent completed_at", async () => {
+      await reset(db);
+      await db.exec(`UPDATE ${names[0]} SET terminal_receipt='malformed',read_back_sha256='malformed'`);
+      const malformed = await response();
+      assert.equal(malformed.body.operation.terminalReceiptPresent,"pass");
+      assert.equal(malformed.body.completionEvidence.terminalReceiptState,"malformed");
+      assert.equal(malformed.body.completionEvidence.readBackShaState,"malformed");
+      assert.equal(malformed.body.completionEvidence.completedAtState,"valid-timestamp");
+      assert.equal(malformed.body.completionEvidence.repairEligibility,"not-assessed");
+      await assert.rejects(db.exec(`UPDATE ${names[0]} SET completed_at=NULL`),{code:"23514"});
+      outcomes.push({scenario:"malformed-terminal-individual-fields",evidence:malformed.body.completionEvidence});
     });
 
     await t.test("real SQL missing-table failure is a safe API reason, never an absent row", async () => {
