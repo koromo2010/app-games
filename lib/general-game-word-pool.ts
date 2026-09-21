@@ -4,37 +4,13 @@ import {
   loadGeneralGameWordRecords,
   type GeneralGameWordDifficulty,
 } from "./general-game-word-repository.ts";
-import { expectedAppEnvironment } from "./storage-environment-guard.ts";
-import { vocabularyDatabaseErrorCode } from "./vocabulary-postgres-store.ts";
+import { emitObservabilityEvent } from "./observability/logger.ts";
+import { reportWordPoolFailure } from "./word-pool-diagnostics.ts";
 
 export { generalGameWordPoolSource };
 export { generalGameWordDifficulties };
 export type { GeneralGameWordDifficulty };
 export type GeneralGameWordPools = Record<GeneralGameWordDifficulty, string[]>;
-
-function generalGameWordPoolErrorCode(error: unknown) {
-  if (!(error instanceof Error)) return "UNEXPECTED_ERROR";
-  const candidate = error.message.split(":", 1)[0]?.trim() ?? "";
-  if (/^[A-Z][A-Z0-9_]{2,79}$/.test(candidate)) return candidate;
-  return error.name.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0, 80) || "UNEXPECTED_ERROR";
-}
-
-function logGeneralGameWordPoolDiagnostic(
-  level: "info" | "warn" | "error",
-  operation: string,
-  fields: { sourceCount?: number; errorCode?: string; databaseCode?: string; outcome: "success" | "failed" },
-) {
-  console[level](JSON.stringify({
-    schemaVersion: 1,
-    occurredAt: new Date().toISOString(),
-    level,
-    event: "word.pool",
-    service: "app-games-web",
-    environment: expectedAppEnvironment(),
-    deployment: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12),
-    fields: { game: "general-word-pool", operation, ...fields },
-  }));
-}
 
 const emptyPools = (): GeneralGameWordPools => ({ easy: [], normal: [], hard: [] });
 
@@ -107,7 +83,10 @@ export function selectGeneralGameWordsForBands(
       picked = candidate;
       break;
     }
-    if (!picked) throw new Error("GENERAL_GAME_WORD_POOL_UNAVAILABLE");
+    if (!picked) {
+      reportWordPoolFailure("draw", "candidates");
+      throw new Error("GENERAL_GAME_WORD_POOL_UNAVAILABLE");
+    }
     selected.push(picked);
   }
   return selected;
@@ -120,17 +99,7 @@ export async function loadGeneralGameWordPools(
   const safeLimit = Math.max(1, Math.min(500, Math.floor(limitPerDifficulty)));
   const excluded = new Set(excludeWords.map(normalizeGeneralGameWord).filter(Boolean));
 
-  let rows;
-  try {
-    rows = await loadGeneralGameWordRecords(safeLimit);
-  } catch (error) {
-    logGeneralGameWordPoolDiagnostic("error", "load-query", {
-      errorCode: generalGameWordPoolErrorCode(error),
-      databaseCode: vocabularyDatabaseErrorCode(error),
-      outcome: "failed",
-    });
-    throw error;
-  }
+  const rows = await loadGeneralGameWordRecords(safeLimit);
 
   const pools = emptyPools();
   const seen = new Set<string>();
@@ -144,7 +113,8 @@ export async function loadGeneralGameWordPools(
   }
   for (const difficulty of generalGameWordDifficulties) {
     pools[difficulty] = shuffle(pools[difficulty]).slice(0, safeLimit);
-    logGeneralGameWordPoolDiagnostic("info", `loaded-${difficulty}`, {
+    emitObservabilityEvent("info", "word.pool", {
+      game: "general-word-pool", operation: `loaded-${difficulty}`,
       sourceCount: pools[difficulty].length,
       outcome: pools[difficulty].length > 0 ? "success" : "failed",
     });

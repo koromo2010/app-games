@@ -86,6 +86,27 @@ Redis key/value、Room code、playerId、URL、token、接続文字列は記録�
 観測イベント自身のRedis保存が失敗した場合は、同じ保存を再帰的に呼ばず、
 `observability.sink-failure`をprocess logへ1回だけ出す。
 
+## 共通単語取得の診断
+
+共通単語取得の`word.pool`イベントは、既存のlogger・閉じたfield schemaを使用する。
+`reviewed-query` / `legacy-query`はDB読取、`history-read`はRedis履歴読取、
+`draw`は取得後の候補不足を表す。`loaded-easy|normal|hard`は語彙本文を含まない取得件数。
+失敗コードは固定値だけとし、外部例外のmessage/nameから生成しない。
+
+| errorCode | 意味 |
+| --- | --- |
+| `WORD_POOL_NOT_CONFIGURED` | 語彙DB設定なし |
+| `WORD_POOL_DATABASE_ACCESS_FAILED` | SQLSTATE 42501または28系の権限・認証失敗 |
+| `WORD_POOL_DATABASE_SCHEMA_FAILED` | 上記以外の42系schema/query構造の失敗 |
+| `WORD_POOL_DATABASE_CONNECTION_FAILED` | 08系の接続失敗 |
+| `WORD_POOL_DATABASE_QUERY_FAILED` | 上記で分類できないDB読取失敗。接続障害とは断定しない |
+| `WORD_POOL_HISTORY_READ_FAILED` | Redis履歴の取得失敗。履歴なしとして続行しない |
+| `WORD_POOL_CANDIDATES_INSUFFICIENT` | 取得・除外後に予定難易度の候補が足りない |
+
+SQLSTATEのみ`databaseCode`へ添える。接続文字列、語彙、raw外部例外は含めない。
+旧local schemaのmembership表欠落ではschema診断後に既存の審査済み互換読取が走るため、
+その診断単独を最終的なゲーム失敗とは扱わない。
+
 ## 環境変数
 
 - `OBSERVABILITY_LOG_LEVEL`: `debug | info | warn | error`。既定 `info`

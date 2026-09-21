@@ -14,10 +14,13 @@
 アカウント、メール、認証情報、戦績、レーティング、プレイバック、既出履歴、評価生データ、問い合わせは環境別に保存する。単語、語釈、ペア、連想グループと本番評価から作る品質集計だけを共通DBへ置く。別DB間のID参照はUUIDによる論理参照であり、外部キーではない。
 
 一般ゲーム用の語も共通DBを正本とするが、`active_words`のZipf値から難易度を
-再生成しない。旧選定表で審査済みの`standard-game`適格性、
-`general_game_pool`フラグ、`difficulty_easy | difficulty_normal | difficulty_hard`
-フラグを、共通DBの`word_game_eligibility`へ保存する。SDK、ワードアウト、
-コードインターセプトは、3条件が揃った同じ読取Repositoryだけを使う。
+再生成しない。現在の共通読取は`active_words`と審査済み同期先
+`word_pool_memberships`の`general` membershipを使う。同じ難易度・normalized surfaceの
+重複を除去した後、難易度別に上限を適用する。全難易度を並べた後の全体LIMITではない。
+SDK、ワードアウト、コードインターセプトは同じ読取Repositoryを使う。
+membership表がない旧local schemaだけは、`word_game_eligibility`の審査済み
+`standard-game`適格性、`general_game_pool`フラグ、
+`difficulty_easy | difficulty_normal | difficulty_hard`フラグと有効期間を満たす互換読取を維持する。
 環境別アプリDBへ語彙表や選定表を複製しない。
 
 ## 必須環境変数

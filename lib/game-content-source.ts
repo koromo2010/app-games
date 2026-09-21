@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { reportWordPoolFailure } from "./word-pool-diagnostics.ts";
 import {
   generalGameWordDifficultyWeights,
   normalizeGeneralGameWord,
@@ -66,7 +67,10 @@ function selectGeneralBands(
   const selected: ReviewedWordRecord[] = [];
   for (const band of planGeneralGameWordBands(difficulty, count, random)) {
     const record = queues[band].pop();
-    if (!record) throw new Error("GAME_CONTENT_UNAVAILABLE");
+    if (!record) {
+      reportWordPoolFailure("draw", "candidates");
+      throw new Error("GAME_CONTENT_UNAVAILABLE");
+    }
     selected.push(record);
   }
   return selected;
@@ -108,7 +112,10 @@ export async function drawGameContentWords(
   const selected = input.pool === "general"
     ? selectGeneralBands(available, input.difficulty, count, random)
     : shuffle(available.filter((record) => record.difficulty === input.difficulty), random).slice(0, count);
-  if (selected.length !== count) throw new Error("GAME_CONTENT_UNAVAILABLE");
+  if (selected.length !== count) {
+    reportWordPoolFailure("draw", "candidates");
+    throw new Error("GAME_CONTENT_UNAVAILABLE");
+  }
   return selected.map((record) => ({ ...record, opaqueId: contentId(record, options.idSecret) }));
 }
 

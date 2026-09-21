@@ -6,6 +6,7 @@ import {
   generalGameWordDifficulties,
   type GeneralGameWordDifficulty,
 } from "./general-game-word-classification.ts";
+import { reportWordPoolFailure } from "./word-pool-diagnostics.ts";
 
 export const reviewedWordPools = [
   "general",
@@ -55,14 +56,15 @@ export async function loadReviewedWordPoolRecords(input: {
   limitPerDifficulty?: number;
 }) {
   if (!isVocabularyPostgresConfigured()) {
+    reportWordPoolFailure("reviewed-query", "configuration");
     throw new Error("REVIEWED_WORD_POOL_UNAVAILABLE");
   }
-  const sql = getVocabularyPostgresClient();
   const safeLimit = Math.max(1, Math.min(500, Math.floor(input.limitPerDifficulty ?? 500)));
   const difficulties = input.difficulty
     ? [input.difficulty]
     : [...generalGameWordDifficulties];
   try {
+    const sql = getVocabularyPostgresClient();
     const rows = await sql`
       WITH ranked AS (
         SELECT word.id, word.surface, word.normalized_surface, word.reading,
@@ -76,12 +78,18 @@ export async function loadReviewedWordPoolRecords(input: {
           ON membership.word_id = word.id
         WHERE membership.pool = ${input.pool}
           AND membership.difficulty = ANY(${difficulties}::text[])
+      ), limited AS (
+        SELECT id, surface, normalized_surface, reading, difficulty,
+               ROW_NUMBER() OVER (
+                 PARTITION BY difficulty ORDER BY id
+               ) AS difficulty_order
+        FROM ranked
+        WHERE surface_order = 1
       )
       SELECT id, surface, normalized_surface, reading, difficulty
-      FROM ranked
-      WHERE surface_order = 1
+      FROM limited
+      WHERE difficulty_order <= ${safeLimit}
       ORDER BY difficulty, id
-      LIMIT ${safeLimit * difficulties.length}
     ` as ReviewedWordRow[];
     return rows.flatMap((row) => isReviewedWordDifficulty(row.difficulty) ? [{
       id: row.id,
@@ -92,6 +100,7 @@ export async function loadReviewedWordPoolRecords(input: {
       pool: input.pool,
     }] : []);
   } catch (error) {
+    reportWordPoolFailure("reviewed-query", "database", error);
     // Older local databases predate the synchronized membership table. Do not
     // silently substitute another pool: callers must see unavailable content.
     if (isMissingMembershipTable(error)) {

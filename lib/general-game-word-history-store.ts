@@ -6,6 +6,7 @@ import {
   type GeneralGameWordDifficulty,
 } from "./general-game-word-pool.ts";
 import { redisCommand, redisPipeline } from "./redis-store.ts";
+import { reportWordPoolFailure } from "./word-pool-diagnostics.ts";
 
 export type GeneralGameWordHistoryGame = "nigoichi" | "code-intercept";
 
@@ -44,8 +45,13 @@ export async function loadTodaysGeneralGameWordHistory(
   now = Date.now(),
 ) {
   const ids = uniquePlayerIds(playerIds);
-  const results = await redisPipeline<string[][]>(ids.map((id) => ["SMEMBERS", generalGameWordDailyHistoryKey(game, id, now)]));
-  return [...new Set(results.flat().map(normalizeGeneralGameWord).filter(Boolean))];
+  try {
+    const results = await redisPipeline<string[][]>(ids.map((id) => ["SMEMBERS", generalGameWordDailyHistoryKey(game, id, now)]));
+    return [...new Set(results.flat().map(normalizeGeneralGameWord).filter(Boolean))];
+  } catch (error) {
+    reportWordPoolFailure("history-read", "history");
+    throw error;
+  }
 }
 
 export async function prepareGeneralGameWordDraw(input: {
